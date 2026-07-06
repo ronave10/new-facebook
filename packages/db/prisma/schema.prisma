@@ -1,0 +1,907 @@
+// CampaignOS AI — Prisma schema
+// Multi-tenant: every tenant-owned row carries organizationId and all queries
+// MUST go through tenant-scoped repositories (see apps/api PrismaService docs).
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─────────────────────────────── Identity & Tenancy ───────────────────────────────
+
+enum OrgRole {
+  ADMIN
+  AGENCY_OWNER
+  ACCOUNT_MANAGER
+  CLIENT_VIEWER
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  name         String
+  locale       String   @default("he")
+  isActive     Boolean  @default(true)
+  lastLoginAt  DateTime?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  memberships   OrganizationMember[]
+  refreshTokens RefreshToken[]
+
+  @@map("users")
+}
+
+model Organization {
+  id        String   @id @default(cuid())
+  name      String
+  slug      String   @unique
+  plan      String   @default("free")
+  settings  Json     @default("{}")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  members             OrganizationMember[]
+  clients             Client[]
+  metaConnections     MetaConnection[]
+  encryptedCredentials EncryptedCredential[]
+  auditLogs           AuditLog[]
+  apiTokens           ApiToken[]
+  webhooks            Webhook[]
+
+  @@map("organizations")
+}
+
+model OrganizationMember {
+  id             String   @id @default(cuid())
+  organizationId String
+  userId         String
+  role           OrgRole
+  // CLIENT_VIEWER members may be restricted to specific clients
+  clientScope    String[] @default([])
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, userId])
+  @@index([userId])
+  @@map("organization_members")
+}
+
+model RefreshToken {
+  id        String    @id @default(cuid())
+  userId    String
+  tokenHash String    @unique
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("refresh_tokens")
+}
+
+model ApiToken {
+  id             String    @id @default(cuid())
+  organizationId String
+  name           String
+  tokenHash      String    @unique
+  scopes         String[]  @default([])
+  lastUsedAt     DateTime?
+  expiresAt      DateTime?
+  createdById    String
+  createdAt      DateTime  @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+  @@map("api_tokens")
+}
+
+// ─────────────────────────────── Clients & Brand ───────────────────────────────
+
+enum CampaignGoal {
+  LEADS
+  SALES
+  TRAFFIC
+  MESSAGES
+  AWARENESS
+  ENGAGEMENT
+  REMARKETING
+}
+
+enum ClientStatus {
+  ONBOARDING
+  ACTIVE
+  PAUSED
+  ARCHIVED
+}
+
+model Client {
+  id             String       @id @default(cuid())
+  organizationId String
+  name           String
+  industry       String?
+  website        String?
+  activityArea   String?
+  language       String       @default("he")
+  currency       String       @default("ILS")
+  country        String       @default("IL")
+  status         ClientStatus @default(ONBOARDING)
+  createdById    String?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  organization    Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  brandProfile    ClientBrandProfile?
+  personas        CustomerPersona[]
+  offers          Offer[]
+  competitors     Competitor[]
+  campaigns       Campaign[]
+  creatives       AdCreative[]
+  creativeAssets  CreativeAsset[]
+  copyVariants    GeneratedCopyVariant[]
+  snapshots       PerformanceSnapshot[]
+  recommendations OptimizationRecommendation[]
+  agentRuns       AgentRun[]
+  metaConnections MetaConnection[]
+  metaAdAccounts  MetaAdAccount[]
+
+  @@index([organizationId])
+  @@map("clients")
+}
+
+model ClientBrandProfile {
+  id             String        @id @default(cuid())
+  organizationId String
+  clientId       String        @unique
+  campaignGoal   CampaignGoal?
+  mainProduct    String?
+  priceRange     String?
+  keyBenefits    Json          @default("[]")
+  differentiation String?
+  customerPains  Json          @default("[]")
+  commonObjections Json        @default("[]")
+  proofs         Json          @default("[]")
+  brandTone      String?
+  // { forbiddenWords: string[], forbiddenPromises: string[], regulatoryNotes: string, sensitiveTopics: string[] }
+  restrictions   Json          @default("{}")
+  extra          Json          @default("{}")
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+  @@map("client_brand_profiles")
+}
+
+enum PersonaSource {
+  AI
+  MANUAL
+}
+
+model CustomerPersona {
+  id                String        @id @default(cuid())
+  organizationId    String
+  clientId          String
+  name              String
+  ageRange          String?
+  lifeSituation     String?
+  pains             Json          @default("[]")
+  desires           Json          @default("[]")
+  fears             Json          @default("[]")
+  objections        Json          @default("[]")
+  emotionalTriggers Json          @default("[]")
+  conversionDrivers Json          @default("[]")
+  distrustTriggers  Json          @default("[]")
+  copyStyle         String?
+  creativeStyle     String?
+  matchingOffers    Json          @default("[]")
+  campaignAngles    Json          @default("[]")
+  source            PersonaSource @default(AI)
+  agentRunId        String?
+  isArchived        Boolean       @default(false)
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+
+  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  ads    Ad[]
+
+  @@index([organizationId, clientId])
+  @@map("customer_personas")
+}
+
+model Offer {
+  id             String   @id @default(cuid())
+  organizationId String
+  clientId       String
+  name           String
+  description    String?
+  price          String?
+  offerType      String?
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, clientId])
+  @@map("offers")
+}
+
+model Competitor {
+  id             String   @id @default(cuid())
+  organizationId String
+  clientId       String
+  name           String
+  website        String?
+  notes          String?
+  strengths      Json     @default("[]")
+  weaknesses     Json     @default("[]")
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, clientId])
+  @@map("competitors")
+}
+
+// ─────────────────────────────── Meta Connection ───────────────────────────────
+
+enum MetaConnectionStatus {
+  CONNECTED
+  NEEDS_RECONNECT
+  ERROR
+  DISCONNECTED
+}
+
+model EncryptedCredential {
+  id             String    @id @default(cuid())
+  organizationId String
+  provider       String // "meta" | "anthropic" | ...
+  ciphertext     String
+  iv             String
+  authTag        String
+  keyVersion     Int       @default(1)
+  createdAt      DateTime  @default(now())
+  rotatedAt      DateTime?
+
+  organization Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  connections  MetaConnection[]
+
+  @@index([organizationId, provider])
+  @@map("encrypted_credentials")
+}
+
+model MetaConnection {
+  id             String               @id @default(cuid())
+  organizationId String
+  clientId       String?
+  status         MetaConnectionStatus @default(DISCONNECTED)
+  metaUserId     String?
+  metaUserName   String?
+  scopes         String[]             @default([])
+  credentialId   String?
+  tokenExpiresAt DateTime?
+  lastSyncedAt   DateTime?
+  lastError      String?
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
+
+  organization Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  client       Client?              @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  credential   EncryptedCredential? @relation(fields: [credentialId], references: [id], onDelete: SetNull)
+  adAccounts   MetaAdAccount[]
+  pages        MetaPage[]
+  pixels       MetaPixel[]
+
+  @@index([organizationId, clientId])
+  @@map("meta_connections")
+}
+
+model MetaAdAccount {
+  id             String   @id @default(cuid())
+  connectionId   String
+  organizationId String
+  clientId       String?
+  accountId      String // numeric id, without act_ prefix
+  name           String
+  currency       String?
+  timezone       String?
+  accountStatus  Int?
+  isSelected     Boolean  @default(false)
+  raw            Json     @default("{}")
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  connection MetaConnection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+  client     Client?        @relation(fields: [clientId], references: [id], onDelete: SetNull)
+
+  @@unique([connectionId, accountId])
+  @@index([organizationId])
+  @@map("meta_ad_accounts")
+}
+
+model MetaPage {
+  id                 String   @id @default(cuid())
+  connectionId       String
+  organizationId     String
+  pageId             String
+  name               String
+  category           String?
+  leadgenTosAccepted Boolean  @default(false)
+  raw                Json     @default("{}")
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  connection MetaConnection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+
+  @@unique([connectionId, pageId])
+  @@index([organizationId])
+  @@map("meta_pages")
+}
+
+model MetaPixel {
+  id             String   @id @default(cuid())
+  connectionId   String
+  organizationId String
+  pixelId        String
+  name           String?
+  adAccountId    String?
+  raw            Json     @default("{}")
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  connection MetaConnection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+
+  @@unique([connectionId, pixelId])
+  @@index([organizationId])
+  @@map("meta_pixels")
+}
+
+// ─────────────────────────────── Campaigns ───────────────────────────────
+
+enum CampaignStatus {
+  DRAFT
+  PENDING_APPROVAL
+  APPROVED
+  PUBLISHING
+  PUBLISHED
+  PAUSED
+  ARCHIVED
+  ERROR
+}
+
+enum BudgetType {
+  DAILY
+  LIFETIME
+}
+
+model Campaign {
+  id             String         @id @default(cuid())
+  organizationId String
+  clientId       String
+  name           String
+  goal           CampaignGoal
+  metaObjective  String? // e.g. OUTCOME_LEADS
+  status         CampaignStatus @default(DRAFT)
+  metaCampaignId String?
+  adAccountId    String? // MetaAdAccount.id (internal)
+  pageId         String? // MetaPage.id (internal)
+  igAccountId    String?
+  budgetType     BudgetType     @default(DAILY)
+  budgetAmount   Int? // minor units (agorot/cents)
+  currency       String         @default("ILS")
+  startAt        DateTime?
+  endAt          DateTime?
+  targetingDraft Json           @default("{}")
+  specialAdCategories String[]  @default([])
+  notes          String?
+  createdById    String?
+  publishedAt    DateTime?
+  lastSyncedAt   DateTime?
+  lastError      String?
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  client   Client            @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  strategy CampaignStrategy?
+  adSets   AdSet[]
+  ads      Ad[]
+
+  @@index([organizationId, clientId])
+  @@index([organizationId, status])
+  @@map("campaigns")
+}
+
+model CampaignStrategy {
+  id             String   @id @default(cuid())
+  organizationId String
+  campaignId     String   @unique
+  structure      Json     @default("{}")
+  budgetSplit    Json     @default("{}")
+  funnelPlan     Json     @default("{}")
+  abTestPlan     Json     @default("{}")
+  hypotheses     Json     @default("[]")
+  kpis           Json     @default("[]")
+  // kill/scale/refresh rules
+  rules          Json     @default("{}")
+  summary        String?
+  agentRunId     String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+  @@map("campaign_strategies")
+}
+
+enum EntityPublishStatus {
+  DRAFT
+  PENDING_APPROVAL
+  APPROVED
+  PUBLISHING
+  PUBLISHED
+  PAUSED
+  ARCHIVED
+  ERROR
+}
+
+model AdSet {
+  id               String              @id @default(cuid())
+  organizationId   String
+  campaignId       String
+  name             String
+  status           EntityPublishStatus @default(DRAFT)
+  metaAdSetId      String?
+  optimizationGoal String?
+  billingEvent     String?
+  budgetAmount     Int?
+  budgetType       BudgetType?
+  targeting        Json                @default("{}")
+  placements       Json                @default("{}")
+  startAt          DateTime?
+  endAt            DateTime?
+  lastError        String?
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
+
+  campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  ads      Ad[]
+
+  @@index([organizationId, campaignId])
+  @@map("ad_sets")
+}
+
+enum VariantStyle {
+  SHORT
+  LONG
+  EMOTIONAL
+  DIRECT
+  PROOF
+  PAIN
+  DREAM
+}
+
+model Ad {
+  id              String              @id @default(cuid())
+  organizationId  String
+  campaignId      String
+  adSetId         String?
+  creativeId      String?
+  personaId       String?
+  name            String
+  status          EntityPublishStatus @default(DRAFT)
+  metaAdId        String?
+  angle           String?
+  hook            String?
+  primaryText     String?
+  headline        String?
+  description     String?
+  cta             String?
+  destinationUrl  String?
+  variantStyle    VariantStyle?
+  confidenceScore Int?
+  whyItWorks      String?
+  complianceNotes String?
+  lastError       String?
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+
+  campaign Campaign         @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  adSet    AdSet?           @relation(fields: [adSetId], references: [id], onDelete: SetNull)
+  creative AdCreative?      @relation(fields: [creativeId], references: [id], onDelete: SetNull)
+  persona  CustomerPersona? @relation(fields: [personaId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, campaignId])
+  @@map("ads")
+}
+
+enum CreativeType {
+  IMAGE
+  VIDEO
+  CAROUSEL
+}
+
+model AdCreative {
+  id             String       @id @default(cuid())
+  organizationId String
+  clientId       String
+  name           String
+  type           CreativeType @default(IMAGE)
+  metaCreativeId String?
+  // structured creative brief: { concept, visualDirection, textOnImage, format, referenceStyle, doNotDo }
+  brief          Json         @default("{}")
+  assetId        String?
+  status         String       @default("DRAFT")
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  client Client         @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  asset  CreativeAsset? @relation(fields: [assetId], references: [id], onDelete: SetNull)
+  ads    Ad[]
+
+  @@index([organizationId, clientId])
+  @@map("ad_creatives")
+}
+
+enum AssetKind {
+  IMAGE
+  VIDEO
+}
+
+model CreativeAsset {
+  id             String    @id @default(cuid())
+  organizationId String
+  clientId       String
+  kind           AssetKind
+  fileName       String
+  storageKey     String
+  url            String?
+  mimeType       String?
+  sizeBytes      Int?
+  width          Int?
+  height         Int?
+  metaImageHash  String?
+  metaVideoId    String?
+  createdAt      DateTime  @default(now())
+
+  client    Client       @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  creatives AdCreative[]
+
+  @@index([organizationId, clientId])
+  @@map("creative_assets")
+}
+
+enum CopyKind {
+  ANGLE
+  HOOK
+  PRIMARY_TEXT
+  HEADLINE
+  DESCRIPTION
+  CTA
+  IMAGE_IDEA
+  VIDEO_IDEA
+}
+
+model GeneratedCopyVariant {
+  id             String        @id @default(cuid())
+  organizationId String
+  clientId       String
+  campaignId     String?
+  personaId      String?
+  kind           CopyKind
+  content        String
+  variantStyle   VariantStyle?
+  score          Int?
+  selected       Boolean       @default(false)
+  agentRunId     String?
+  createdAt      DateTime      @default(now())
+
+  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, clientId, kind])
+  @@map("generated_copy_variants")
+}
+
+// ─────────────────────────────── Approvals & Safety ───────────────────────────────
+
+enum ApprovalEntityType {
+  CAMPAIGN
+  AD_SET
+  AD
+  BUDGET_CHANGE
+  STATUS_CHANGE
+  CONNECTION
+}
+
+enum ApprovalAction {
+  PUBLISH
+  UPDATE
+  PAUSE
+  RESUME
+  DELETE
+  BUDGET_INCREASE
+  BUDGET_DECREASE
+}
+
+enum ApprovalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  EXPIRED
+  CONSUMED
+}
+
+model Approval {
+  id             String             @id @default(cuid())
+  organizationId String
+  entityType     ApprovalEntityType
+  entityId       String
+  action         ApprovalAction
+  // The EXACT payload that will be sent to Meta, shown to the user before approval
+  payloadPreview Json               @default("{}")
+  payloadHash    String
+  status         ApprovalStatus     @default(PENDING)
+  requestedById  String
+  decidedById    String?
+  decidedAt      DateTime?
+  reason         String?
+  expiresAt      DateTime?
+  consumedAt     DateTime?
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+
+  @@index([organizationId, status])
+  @@index([organizationId, entityType, entityId])
+  @@map("approvals")
+}
+
+// ─────────────────────────────── Analytics ───────────────────────────────
+
+enum SnapshotLevel {
+  ACCOUNT
+  CAMPAIGN
+  AD_SET
+  AD
+}
+
+enum SnapshotGranularity {
+  DAY
+  WEEK
+  MONTH
+}
+
+model PerformanceSnapshot {
+  id             String              @id @default(cuid())
+  organizationId String
+  clientId       String
+  level          SnapshotLevel
+  // internal entity id (Campaign.id / AdSet.id / Ad.id / MetaAdAccount.id)
+  entityId       String
+  metaEntityId   String?
+  date           DateTime
+  granularity    SnapshotGranularity @default(DAY)
+  spend          Decimal             @default(0) @db.Decimal(14, 4)
+  impressions    Int                 @default(0)
+  reach          Int                 @default(0)
+  clicks         Int                 @default(0)
+  ctr            Decimal?            @db.Decimal(10, 6)
+  cpc            Decimal?            @db.Decimal(14, 6)
+  cpm            Decimal?            @db.Decimal(14, 6)
+  leads          Int                 @default(0)
+  conversions    Int                 @default(0)
+  cpa            Decimal?            @db.Decimal(14, 6)
+  cpl            Decimal?            @db.Decimal(14, 6)
+  purchaseValue  Decimal?            @db.Decimal(14, 4)
+  roas           Decimal?            @db.Decimal(10, 4)
+  raw            Json                @default("{}")
+  createdAt      DateTime            @default(now())
+
+  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@unique([level, entityId, date, granularity])
+  @@index([organizationId, clientId, date])
+  @@map("performance_snapshots")
+}
+
+enum RecommendationType {
+  KILL_AD
+  SCALE_BUDGET
+  REDUCE_BUDGET
+  NEW_VARIANT
+  REFRESH_CREATIVE
+  AUDIENCE_CHANGE
+  STRUCTURE_CHANGE
+  ALERT
+}
+
+enum RecommendationSeverity {
+  INFO
+  SUGGESTION
+  WARNING
+  CRITICAL
+}
+
+enum RecommendationStatus {
+  NEW
+  ACKNOWLEDGED
+  APPLIED
+  DISMISSED
+}
+
+model OptimizationRecommendation {
+  id             String                 @id @default(cuid())
+  organizationId String
+  clientId       String
+  campaignId     String?
+  entityType     String?
+  entityId       String?
+  type           RecommendationType
+  severity       RecommendationSeverity @default(SUGGESTION)
+  title          String
+  body           String
+  // metrics snapshot that justifies the recommendation
+  evidence       Json                   @default("{}")
+  status         RecommendationStatus   @default(NEW)
+  agentRunId     String?
+  decidedById    String?
+  decidedAt      DateTime?
+  createdAt      DateTime               @default(now())
+  updatedAt      DateTime               @updatedAt
+
+  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, clientId, status])
+  @@map("optimization_recommendations")
+}
+
+// ─────────────────────────────── Agents & Observability ───────────────────────────────
+
+enum AgentType {
+  RESEARCH
+  PERSONA
+  STRATEGY
+  COPY
+  CREATIVE
+  META_API
+  ANALYTICS
+  OPTIMIZATION
+  COMPLIANCE
+  APPROVAL
+}
+
+enum AgentRunStatus {
+  PENDING
+  RUNNING
+  SUCCEEDED
+  FAILED
+}
+
+model AgentRun {
+  id               String         @id @default(cuid())
+  organizationId   String
+  clientId         String?
+  agentType        AgentType
+  status           AgentRunStatus @default(PENDING)
+  input            Json           @default("{}")
+  output           Json?
+  inputHash        String?
+  outputHash       String?
+  model            String?
+  promptTokens     Int?
+  completionTokens Int?
+  error            String?
+  triggeredById    String?
+  startedAt        DateTime?
+  finishedAt       DateTime?
+  createdAt        DateTime       @default(now())
+
+  client Client? @relation(fields: [clientId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, agentType, createdAt])
+  @@map("agent_runs")
+}
+
+enum ActorType {
+  USER
+  SYSTEM
+  AGENT
+}
+
+model AuditLog {
+  id         String    @id @default(cuid())
+  organizationId String
+  actorId    String?
+  actorType  ActorType @default(USER)
+  action     String // e.g. "campaign.publish", "meta.connect", "auth.login"
+  entityType String?
+  entityId   String?
+  beforeHash String?
+  afterHash  String?
+  metadata   Json      @default("{}")
+  ip         String?
+  userAgent  String?
+  createdAt  DateTime  @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, createdAt])
+  @@index([organizationId, action])
+  @@map("audit_logs")
+}
+
+// Log of every call to Meta (Marketing API or MCP tool) — required by safety rules.
+model MetaApiCallLog {
+  id             String   @id @default(cuid())
+  organizationId String
+  connectionId   String?
+  // endpoint path or MCP tool name
+  operation      String
+  isWrite        Boolean  @default(false)
+  approvalId     String?
+  requestHash    String?
+  responseCode   Int?
+  success        Boolean  @default(true)
+  error          String?
+  durationMs     Int?
+  createdAt      DateTime @default(now())
+
+  @@index([organizationId, createdAt])
+  @@map("meta_api_call_logs")
+}
+
+model Webhook {
+  id             String   @id @default(cuid())
+  organizationId String
+  url            String
+  secret         String
+  events         String[] @default([])
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+  @@map("webhooks")
+}
+
+enum JobStatus {
+  QUEUED
+  RUNNING
+  SUCCEEDED
+  FAILED
+  RETRYING
+}
+
+// Mirror of queue jobs for in-app visibility (source of truth is BullMQ/Redis).
+model BackgroundJob {
+  id             String    @id @default(cuid())
+  organizationId String?
+  queue          String
+  name           String
+  payload        Json      @default("{}")
+  status         JobStatus @default(QUEUED)
+  attempts       Int       @default(0)
+  error          String?
+  scheduledAt    DateTime?
+  startedAt      DateTime?
+  finishedAt     DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@index([organizationId, queue, status])
+  @@map("background_jobs")
+}

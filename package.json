@@ -1,0 +1,25 @@
+{
+  "name": "campaignos-ai",
+  "version": "0.1.0",
+  "private": true,
+  "description": "CampaignOS AI — Multi-tenant SaaS for managing Meta Ads campaigns for clients (Hebrew RTL)",
+  "engines": {
+    "node": ">=20"
+  },
+  "packageManager": "pnpm@10.33.0",
+  "scripts": {
+    "dev": "pnpm --parallel --filter @campaignos/api --filter @campaignos/web dev",
+    "dev:api": "pnpm --filter @campaignos/api dev",
+    "dev:web": "pnpm --filter @campaignos/web dev",
+    "build": "pnpm -r build",
+    "typecheck": "pnpm -r typecheck",
+    "lint": "pnpm -r lint",
+    "test": "pnpm -r test",
+    "db:generate": "pnpm --filter @campaignos/db generate",
+    "db:migrate": "pnpm --filter @campaignos/db migrate:dev",
+    "db:deploy": "pnpm --filter @campaignos/db migrate:deploy",
+    "db:seed": "pnpm --filter @campaignos/db seed",
+    "db:up": "docker compose up -d postgres redis",
+    "db:down": "docker compose down"
+  }
+}
