@@ -20,7 +20,7 @@ export class ApprovalsService {
   async buildBundle(organizationId: string, campaignId: string): Promise<CampaignBundle> {
     const campaign = await this.prisma.campaign.findFirst({
       where: { id: campaignId, organizationId },
-      include: { adSets: { include: { ads: { include: { creative: true } } } } },
+      include: { adSets: { include: { ads: { include: { creative: { include: { asset: true } } } } } } },
     });
     if (!campaign) throw AppException.notFound("הקמפיין לא נמצא");
 
@@ -65,6 +65,7 @@ export class ApprovalsService {
           description: ad.description,
           cta: ad.cta,
           destinationUrl: ad.destinationUrl,
+          imageUrl: ad.creative?.asset?.url ?? null,
         })),
       })),
     };

@@ -8,6 +8,7 @@ import { ClientsModule } from "./clients/clients.module";
 import { MetaModule } from "./meta/meta.module";
 import { CampaignsModule } from "./campaigns/campaigns.module";
 import { AnalyticsModule } from "./analytics/analytics.module";
+import { StorageModule } from "./storage/storage.module";
 
 @Module({
   imports: [
@@ -19,6 +20,7 @@ import { AnalyticsModule } from "./analytics/analytics.module";
     MetaModule,
     CampaignsModule,
     AnalyticsModule,
+    StorageModule,
   ],
   controllers: [HealthController],
 })

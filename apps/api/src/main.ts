@@ -22,6 +22,10 @@ async function bootstrap(): Promise<void> {
   });
 
   app.setGlobalPrefix("api/v1");
+  // Allow base64 media uploads in JSON bodies (creative assets, up to ~12MB encoded).
+  const express = await import("express");
+  app.use(express.json({ limit: "12mb" }));
+  app.use(express.urlencoded({ limit: "12mb", extended: true }));
   app.enableCors({
     origin: [config.WEB_URL],
     credentials: true,

@@ -163,6 +163,13 @@ export const api = {
   decideRecommendation: (id: string, decision: string) =>
     post<any>(`/recommendations/${id}/decide`, { decision }),
 
+  // creative assets
+  assets: (clientId: string) => get<any[]>(`/clients/${clientId}/assets`),
+  uploadAsset: (clientId: string, b: { fileName: string; mimeType: string; kind: "IMAGE" | "VIDEO"; dataBase64: string }) =>
+    post<any>(`/clients/${clientId}/assets`, b),
+  attachAsset: (creativeId: string, assetId: string) =>
+    post<any>(`/creatives/${creativeId}/attach-asset`, { assetId }),
+
   // agent runs
   agentRuns: (clientId?: string, agentType?: string) =>
     get<any>(`/agent-runs?${clientId ? `clientId=${clientId}&` : ""}${agentType ? `agentType=${agentType}` : ""}`),

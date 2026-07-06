@@ -49,6 +49,7 @@ export interface CampaignBundle {
       description: string | null;
       cta: string | null;
       destinationUrl: string | null;
+      imageUrl?: string | null;
     }[];
   }[];
 }
@@ -129,6 +130,7 @@ export function buildPublishPlan(bundle: CampaignBundle): PublishStep[] {
           headline: ad.headline ?? "",
           description: ad.description ?? "",
           callToActionType: mapCta(ad.cta),
+          ...(ad.imageUrl ? { imageUrl: ad.imageUrl } : {}),
         },
         ref: { type: "creative", localId: ad.creativeId ?? ad.id },
       });
