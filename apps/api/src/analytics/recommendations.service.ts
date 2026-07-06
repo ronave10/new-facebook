@@ -1,5 +1,12 @@
 import { Injectable } from "@nestjs/common";
 import { optimizationSchema } from "@campaignos/shared";
+import {
+  cplBenchmark,
+  evaluateRules,
+  normalizeVertical,
+  type EntityMetrics,
+  type RuleTargets,
+} from "@campaignos/marketing-core";
 import { AppException } from "../core/api-error";
 import { AuditService } from "../core/audit.service";
 import { PrismaService } from "../core/prisma.service";
@@ -35,14 +42,34 @@ export class RecommendationsService {
       where: { organizationId: user.organizationId, clientId, date: { gte: since } },
     });
 
-    // aggregate per campaign for the prompt
-    const byCampaign = new Map<string, { spend: number; leads: number; clicks: number; impressions: number }>();
+    // aggregate per campaign for the prompt AND the deterministic rule engine
+    interface Agg {
+      spend: number;
+      leads: number;
+      conversions: number;
+      clicks: number;
+      impressions: number;
+      reach: number;
+      days: Set<string>;
+    }
+    const byCampaign = new Map<string, Agg>();
     for (const s of snapshots) {
-      const agg = byCampaign.get(s.entityId) ?? { spend: 0, leads: 0, clicks: 0, impressions: 0 };
+      const agg = byCampaign.get(s.entityId) ?? {
+        spend: 0,
+        leads: 0,
+        conversions: 0,
+        clicks: 0,
+        impressions: 0,
+        reach: 0,
+        days: new Set<string>(),
+      };
       agg.spend += Number(s.spend);
       agg.leads += s.leads;
+      agg.conversions += s.conversions;
       agg.clicks += s.clicks;
       agg.impressions += s.impressions;
+      agg.reach += s.reach;
+      agg.days.add(s.date.toISOString().slice(0, 10));
       byCampaign.set(s.entityId, agg);
     }
     const campaigns = await this.prisma.campaign.findMany({
@@ -50,6 +77,24 @@ export class RecommendationsService {
       select: { id: true, name: true },
     });
     const nameById = new Map(campaigns.map((c) => [c.id, c.name]));
+
+    // ── Deterministic Kill/Scale/Refresh rules (evidence-backed, guaranteed) ──
+    const targetCpa = cplBenchmark(client.industry ? normalizeVertical(client.industry) : null).p50;
+    const targets: RuleTargets = { targetCpaIls: targetCpa, cpmP50: 35 };
+    const entityMetrics: EntityMetrics[] = [...byCampaign.entries()].map(([id, a]) => ({
+      entityId: id,
+      entityName: nameById.get(id) ?? id,
+      level: "CAMPAIGN" as const,
+      spend: a.spend,
+      impressions: a.impressions,
+      clicks: a.clicks,
+      leads: a.leads,
+      conversions: a.conversions,
+      daysLive: a.days.size,
+      frequency: a.reach > 0 ? a.impressions / a.reach : undefined,
+      ctrPct: a.impressions > 0 ? (a.clicks / a.impressions) * 100 : undefined,
+    }));
+    const deterministicFindings = evaluateRules(entityMetrics, targets);
     const kpiSummary =
       [...byCampaign.entries()]
         .map(([id, a]) => {
@@ -83,21 +128,43 @@ export class RecommendationsService {
       schema: optimizationSchema,
     });
 
+    // Deterministic findings are authoritative; AI findings augment them. Dedup by rule/title.
+    const seenRules = new Set(deterministicFindings.map((f) => f.evidence.rule).filter(Boolean));
+    const deterministicRows = deterministicFindings.map((f) => ({
+      organizationId: user.organizationId,
+      clientId,
+      campaignId: f.entityId,
+      entityType: "CAMPAIGN",
+      entityId: f.entityId,
+      type: f.type,
+      severity: f.severity,
+      title: f.title,
+      body: f.body,
+      evidence: f.evidence as object,
+      status: "NEW" as const,
+      agentRunId: null,
+    }));
+    const aiRows = data.recommendations
+      // drop AI suggestions that duplicate a deterministic rule already firing
+      .filter((r) => !(r.evidence as { rule?: string })?.rule || !seenRules.has((r.evidence as { rule?: string }).rule!))
+      .map((r) => ({
+        organizationId: user.organizationId,
+        clientId,
+        campaignId: null,
+        entityType: null,
+        entityId: null,
+        type: r.type,
+        severity: r.severity,
+        title: r.title,
+        body: r.body,
+        evidence: (r.evidence ?? {}) as object,
+        status: "NEW" as const,
+        agentRunId: runId,
+      }));
+
     const created = await this.prisma.$transaction(
-      data.recommendations.map((r) =>
-        this.prisma.optimizationRecommendation.create({
-          data: {
-            organizationId: user.organizationId,
-            clientId,
-            type: r.type,
-            severity: r.severity,
-            title: r.title,
-            body: r.body,
-            evidence: (r.evidence ?? {}) as object,
-            status: "NEW",
-            agentRunId: runId,
-          },
-        }),
+      [...deterministicRows, ...aiRows].map((row) =>
+        this.prisma.optimizationRecommendation.create({ data: row }),
       ),
     );
     await this.audit.log({

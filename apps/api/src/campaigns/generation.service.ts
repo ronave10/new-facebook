@@ -6,6 +6,7 @@ import {
   type AdGenerationSchema,
   type VariantStyle,
 } from "@campaignos/shared";
+import { checkCompliance, normalizeVertical } from "@campaignos/marketing-core";
 import { AppException } from "../core/api-error";
 import { AuditService } from "../core/audit.service";
 import { PrismaService } from "../core/prisma.service";
@@ -152,7 +153,24 @@ export class GenerationService {
       })
       .catch(() => ({ data: { verdict: "PASS", issues: [], notes: "" }, runId: "" }));
 
-    await this.persistGeneration(user, campaign, campaign.clientId, data, personas, variantCount, runId, compliance.data.notes);
+    const r = ctx.restrictions as { forbiddenWords?: string[]; forbiddenPromises?: string[] };
+    const complianceCtx = {
+      vertical: ctx.industry ? normalizeVertical(ctx.industry) : null,
+      forbiddenWords: r.forbiddenWords ?? [],
+      forbiddenPromises: r.forbiddenPromises ?? [],
+    };
+
+    await this.persistGeneration(
+      user,
+      campaign,
+      campaign.clientId,
+      data,
+      personas,
+      variantCount,
+      runId,
+      compliance.data.notes,
+      complianceCtx,
+    );
 
     await this.audit.log({
       organizationId: user.organizationId,
@@ -175,6 +193,7 @@ export class GenerationService {
     variantCount: number,
     runId: string,
     complianceNotes: string,
+    complianceCtx: { vertical: string | null; forbiddenWords: string[]; forbiddenPromises: string[] },
   ) {
     const organizationId = user.organizationId;
 
@@ -237,6 +256,17 @@ export class GenerationService {
             status: "DRAFT",
           },
         });
+
+        // Deterministic compliance guardrail (Layer 1) — runs before we trust the LLM notes.
+        const check = checkCompliance(`${v.primaryText} ${v.headline} ${v.description}`, complianceCtx);
+        const deterministicNote =
+          check.verdict === "PASS"
+            ? ""
+            : `[${check.verdict}] ${check.findings.map((f) => `${f.ruleId}: ${f.excerpt} → ${f.fix}`).join(" · ")}`;
+        const mergedNotes = [deterministicNote, v.complianceNotes, complianceNotes]
+          .filter(Boolean)
+          .join(" | ");
+
         await this.prisma.ad.create({
           data: {
             organizationId,
@@ -245,7 +275,8 @@ export class GenerationService {
             creativeId: creative.id,
             personaId: persona?.id,
             name: `${v.hook.slice(0, 40)}`,
-            status: "DRAFT",
+            // A hard BLOCK keeps the ad out of publishing until fixed.
+            status: check.verdict === "BLOCK" ? "ERROR" : "DRAFT",
             angle: v.angle,
             hook: v.hook,
             primaryText: v.primaryText,
@@ -255,7 +286,7 @@ export class GenerationService {
             variantStyle: v.variantStyle as VariantStyle,
             confidenceScore: Math.round(v.confidenceScore),
             whyItWorks: v.whyItWorks,
-            complianceNotes: `${v.complianceNotes}${complianceNotes ? ` | ${complianceNotes}` : ""}`,
+            complianceNotes: mergedNotes,
           },
         });
       }
