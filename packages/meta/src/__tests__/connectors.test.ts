@@ -1,20 +1,20 @@
 import { describe, expect, it } from "vitest";
 import { MockMetaConnector } from "../connectors/mock";
 import { mapGraphError } from "../error-mapping";
-import type { MetaConnectorContext } from "../connector";
+import type { MetaConnector, MetaConnectorContext } from "../connector";
 
 const ctx: MetaConnectorContext = { accessToken: "t", organizationId: "org1" };
 
 describe("MockMetaConnector", () => {
   it("lists seeded assets", async () => {
-    const c = new MockMetaConnector();
+    const c: MetaConnector = new MockMetaConnector();
     expect((await c.listAdAccounts(ctx)).length).toBeGreaterThanOrEqual(2);
     expect((await c.listPages(ctx, "1")).length).toBeGreaterThanOrEqual(1);
     expect((await c.listCampaigns(ctx, "1")).length).toBeGreaterThanOrEqual(2);
   });
 
   it("creates entities in PAUSED state (contract invariant)", async () => {
-    const c = new MockMetaConnector();
+    const c: MetaConnector = new MockMetaConnector();
     const camp = await c.createCampaign(ctx, "1", {
       name: "t",
       objective: "OUTCOME_LEADS",
@@ -36,7 +36,7 @@ describe("MockMetaConnector", () => {
   });
 
   it("activate flips created entity to ACTIVE", async () => {
-    const c = new MockMetaConnector();
+    const c: MetaConnector = new MockMetaConnector();
     const camp = await c.createCampaign(ctx, "1", { name: "t", objective: "OUTCOME_LEADS", specialAdCategories: [] });
     await c.activateEntity(ctx, "1", "campaign", camp.id);
     const found = (await c.listCampaigns(ctx, "1")).find((x) => x.campaignId === camp.id);
@@ -44,7 +44,7 @@ describe("MockMetaConnector", () => {
   });
 
   it("insights are deterministic for the same entity/date", async () => {
-    const c = new MockMetaConnector();
+    const c: MetaConnector = new MockMetaConnector();
     const a = await c.getInsights(ctx, "1", { level: "campaign", datePreset: "last_7d" });
     const b = await c.getInsights(ctx, "1", { level: "campaign", datePreset: "last_7d" });
     expect(a).toEqual(b);
