@@ -1,5 +1,5 @@
 import { Injectable, Logger, OnModuleDestroy } from "@nestjs/common";
-import { Queue, Worker } from "bullmq";
+import { ConnectionOptions, Queue, Worker } from "bullmq";
 import IORedis from "ioredis";
 import { loadConfig } from "./config";
 
@@ -35,7 +35,10 @@ export class QueueService implements OnModuleDestroy {
     const key = `${queueName}:${jobName}`;
     this.handlers.set(key, handler);
     if (this.useRedis && this.connection && !this.queues.has(queueName)) {
-      this.queues.set(queueName, new Queue(queueName, { connection: this.connection }));
+      // ioredis instance is runtime-compatible; cast bridges a dual-package type clash
+      // between the ioredis bundled by bullmq and the one in the workspace.
+      const connection = this.connection as unknown as ConnectionOptions;
+      this.queues.set(queueName, new Queue(queueName, { connection }));
       const worker = new Worker(
         queueName,
         async (job) => {
@@ -46,7 +49,7 @@ export class QueueService implements OnModuleDestroy {
           }
           await h(job.data);
         },
-        { connection: this.connection },
+        { connection },
       );
       worker.on("failed", (job, err) =>
         this.logger.error(`Job ${queueName}:${job?.name} failed: ${err.message}`),
