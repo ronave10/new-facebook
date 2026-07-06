@@ -41,6 +41,14 @@ const envSchema = z.object({
 
   LOG_LEVEL: z.string().default("info"),
   SENTRY_DSN: z.string().optional().default(""),
+
+  // Background scheduler (periodic insights sync). Off by default in dev.
+  ENABLE_CRON: z
+    .string()
+    .optional()
+    .default("false")
+    .transform((v) => v === "true"),
+  SYNC_INTERVAL_MINUTES: z.coerce.number().default(60),
 });
 
 export type AppConfig = z.infer<typeof envSchema>;
