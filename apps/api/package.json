@@ -3,8 +3,8 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "tsx watch src/main.ts",
-    "start": "tsx src/main.ts",
+    "dev": "node --env-file=.env --watch -r @swc-node/register src/main.ts",
+    "start": "node --env-file=.env -r @swc-node/register src/main.ts",
     "build": "tsc --noEmit",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
@@ -29,6 +29,8 @@
     "zod": "^3.24.0"
   },
   "devDependencies": {
+    "@swc-node/register": "^1.11.1",
+    "@swc/core": "^1.15.43",
     "@types/express": "^5.0.0",
     "@types/node": "^22.10.0",
     "pino-pretty": "^13.0.0",

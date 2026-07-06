@@ -1,4 +1,15 @@
 import "reflect-metadata";
+import { existsSync } from "node:fs";
+import { resolve } from "node:path";
+
+// Load env from apps/api/.env or the repo root .env (native Node, no dotenv dep).
+for (const candidate of [resolve(process.cwd(), ".env"), resolve(process.cwd(), "../../.env")]) {
+  if (existsSync(candidate)) {
+    (process as unknown as { loadEnvFile: (p: string) => void }).loadEnvFile(candidate);
+    break;
+  }
+}
+
 import { NestFactory } from "@nestjs/core";
 import { Logger } from "@nestjs/common";
 import { AppModule } from "./app.module";

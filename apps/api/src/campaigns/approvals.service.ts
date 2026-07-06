@@ -156,14 +156,20 @@ export class ApprovalsService {
     if (approval.status !== "PENDING") {
       throw AppException.conflict("בקשת האישור כבר טופלה", "NOT_PENDING");
     }
-    // maker-checker: requester cannot approve their own request unless sole member
+    // maker-checker: the requester may not approve their own request when ANOTHER
+    // member with approval rights (ADMIN/AGENCY_OWNER) exists. If they are the sole
+    // eligible approver, allow it to avoid a deadlock.
     if (approve && approval.requestedById === user.userId) {
-      const members = await this.prisma.organizationMember.count({
-        where: { organizationId: user.organizationId },
+      const otherApprovers = await this.prisma.organizationMember.count({
+        where: {
+          organizationId: user.organizationId,
+          role: { in: ["ADMIN", "AGENCY_OWNER"] },
+          userId: { not: user.userId },
+        },
       });
-      if (members > 1) {
+      if (otherApprovers > 0) {
         throw AppException.forbidden(
-          "מי שביקש את האישור אינו יכול לאשר אותו בעצמו (הפרדת תפקידים)",
+          "מי שביקש את האישור אינו יכול לאשר אותו בעצמו (הפרדת תפקידים). נדרש מאשר אחר.",
           "MAKER_CHECKER",
         );
       }
