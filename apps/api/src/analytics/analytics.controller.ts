@@ -42,6 +42,12 @@ export class AnalyticsController {
     return this.analytics.campaignTimeseries(user, id, granularity);
   }
 
+  @Get("analytics/campaign/:id/ab-test")
+  @RequirePermission("analytics.read")
+  abTest(@CurrentUser() user: AuthContext, @Param("id") id: string) {
+    return this.analytics.campaignAbTest(user, id);
+  }
+
   @Post("recommendations/generate")
   @RequirePermission("recommendation.generate")
   generate(

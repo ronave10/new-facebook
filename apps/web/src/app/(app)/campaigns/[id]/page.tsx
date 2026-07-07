@@ -10,6 +10,7 @@ import { Button, Card, CardBody, ConfirmDialog, EmptyState, PageHeader, Spinner,
 import { CampaignStatusBadge, ApprovalStatusBadge } from "@/components/StatusBadge";
 import { AdPreviewCard } from "@/components/campaigns/AdPreviewCard";
 import { PayloadPreview } from "@/components/campaigns/PayloadPreview";
+import { AbTestPanel } from "@/components/campaigns/AbTestPanel";
 import { formatCurrency } from "@/lib/format";
 
 export default function CampaignDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -35,12 +36,14 @@ export default function CampaignDetailPage({ params }: { params: Promise<{ id: s
           { key: "details", label: "פרטים" },
           { key: "strategy", label: "אסטרטגיה" },
           { key: "ads", label: "מודעות" },
+          { key: "abtest", label: "A/B" },
           { key: "review", label: "אישור ופרסום" },
         ]}
       />
       {tab === "details" && <DetailsTab campaign={campaign} />}
       {tab === "strategy" && <StrategyTab campaign={campaign} onDone={reload} />}
       {tab === "ads" && <AdsTab campaign={campaign} onDone={reload} />}
+      {tab === "abtest" && <AbTestPanel campaignId={campaign.id} />}
       {tab === "review" && <ReviewTab campaign={campaign} onDone={reload} />}
     </div>
   );

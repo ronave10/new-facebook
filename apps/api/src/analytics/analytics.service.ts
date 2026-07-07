@@ -1,6 +1,12 @@
 import { Injectable } from "@nestjs/common";
 import type { DashboardOverview } from "@campaignos/shared";
-import { auditAccount, type AuditInput, type EntityMetrics } from "@campaignos/marketing-core";
+import {
+  auditAccount,
+  evaluateTopTwo,
+  type AbVariantInput,
+  type AuditInput,
+  type EntityMetrics,
+} from "@campaignos/marketing-core";
 import { PrismaService } from "../core/prisma.service";
 import { AuthContext } from "../core/auth-context";
 import { AppException } from "../core/api-error";
@@ -210,5 +216,72 @@ export class AnalyticsService {
       ctr: r.ctr ? Number(r.ctr) : null,
       cpl: r.cpl ? Number(r.cpl) : null,
     }));
+  }
+
+  /**
+   * A/B significance across a campaign's variants. Aggregates ad-level metrics
+   * (falls back to ad-set level), picks the two highest-traffic variants and runs a
+   * two-proportion z-test. Metric is CVR (leads/clicks) when the campaign has leads,
+   * else CTR (clicks/impressions) so it stays meaningful for traffic objectives.
+   */
+  async campaignAbTest(user: AuthContext, campaignId: string) {
+    const campaign = await this.prisma.campaign.findFirst({
+      where: { id: campaignId, organizationId: user.organizationId },
+    });
+    if (!campaign) throw AppException.notFound("הקמפיין לא נמצא");
+    this.assertScope(user, campaign.clientId);
+
+    const buildVariants = async (level: "AD" | "AD_SET") => {
+      const entities =
+        level === "AD"
+          ? await this.prisma.ad.findMany({
+              where: { organizationId: user.organizationId, campaignId },
+              select: { id: true, name: true, hook: true, variantStyle: true },
+            })
+          : await this.prisma.adSet.findMany({
+              where: { organizationId: user.organizationId, campaignId },
+              select: { id: true, name: true },
+            });
+      if (entities.length < 2) return null;
+      const ids = entities.map((e) => e.id);
+      const snaps = await this.prisma.performanceSnapshot.findMany({
+        where: { organizationId: user.organizationId, level: level as never, entityId: { in: ids } },
+        select: { entityId: true, impressions: true, clicks: true, leads: true },
+      });
+      const agg = new Map<string, { impressions: number; clicks: number; leads: number }>();
+      for (const s of snaps) {
+        const a = agg.get(s.entityId) ?? { impressions: 0, clicks: 0, leads: 0 };
+        a.impressions += s.impressions;
+        a.clicks += s.clicks;
+        a.leads += s.leads;
+        agg.set(s.entityId, a);
+      }
+      const withData = entities
+        .map((e) => ({ e, m: agg.get(e.id) }))
+        .filter((x): x is { e: (typeof entities)[number]; m: { impressions: number; clicks: number; leads: number } } => !!x.m);
+      if (withData.length < 2) return null;
+      const totalLeads = withData.reduce((s, x) => s + x.m.leads, 0);
+      const useCvr = totalLeads > 0;
+      const label = (e: (typeof entities)[number]) =>
+        ("hook" in e && e.hook) || e.name || ("variantStyle" in e && e.variantStyle) || "וריאציה";
+      const variants: AbVariantInput[] = withData.map((x) => ({
+        id: x.e.id,
+        label: String(label(x.e)),
+        trials: useCvr ? x.m.clicks : x.m.impressions,
+        successes: useCvr ? x.m.leads : x.m.clicks,
+      }));
+      const metric = useCvr ? "יחס המרה (לידים/קליקים)" : "CTR (קליקים/חשיפות)";
+      return { level, variants, metric };
+    };
+
+    const built = (await buildVariants("AD")) ?? (await buildVariants("AD_SET"));
+    if (!built) {
+      return { available: false, message: "אין מספיק וריאציות עם דאטה להשוואת A/B בקמפיין זה." };
+    }
+    const result = evaluateTopTwo(built.variants, built.metric);
+    if (!result) {
+      return { available: false, message: "אין מספיק תנועה בשתי וריאציות להשוואה." };
+    }
+    return { available: true, level: built.level, variantCount: built.variants.length, ...result };
   }
 }
