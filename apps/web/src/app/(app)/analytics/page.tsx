@@ -5,8 +5,9 @@ import { useSearchParams } from "next/navigation";
 import { api } from "@/lib/api";
 import { useApi } from "@/lib/useApi";
 import { formatCurrency, formatMoney, formatNumber, formatPercent } from "@/lib/format";
-import { Card, CardBody, EmptyState, PageHeader, Select, Spinner, StatCard } from "@/components/ui";
+import { Card, CardBody, EmptyState, PageHeader, Select, Spinner, StatCard, Tabs } from "@/components/ui";
 import { SpendChart } from "@/components/insights/SpendChart";
+import { AccountAudit } from "@/components/insights/AccountAudit";
 
 function AnalyticsInner() {
   const params = useSearchParams();
@@ -14,6 +15,7 @@ function AnalyticsInner() {
   const clients = clientsData?.items ?? [];
   const [clientId, setClientId] = useState<string>("");
   const [preset, setPreset] = useState("last_30d");
+  const [view, setView] = useState("performance");
 
   useEffect(() => {
     const pre = params.get("clientId");
@@ -58,32 +60,47 @@ function AnalyticsInner() {
 
       {!clientId ? (
         <EmptyState title="בחרו לקוח" description="בחרו לקוח מהרשימה כדי לצפות בנתוני הביצועים." />
-      ) : loading ? (
-        <Spinner className="mx-auto my-16 h-7 w-7 text-brand-600" />
-      ) : !overview ? (
-        <EmptyState title="אין נתונים" description="ודאו שהלקוח מחובר ל-Meta ושבוצע סנכרון." />
       ) : (
         <>
-          <div className="mb-6 grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-6">
-            <StatCard label="הוצאה" value={formatCurrency(overview.totalSpend * 100, overview.currency)} />
-            <StatCard label="לידים" value={formatNumber(overview.totalLeads)} accent="green" />
-            <StatCard label="CPL" value={formatMoney(overview.avgCpl, overview.currency)} />
-            <StatCard label="CTR" value={formatPercent(overview.avgCtr)} />
-            <StatCard label="CPC" value={formatMoney(overview.avgCpc, overview.currency)} />
-            <StatCard label="קליקים" value={formatNumber(overview.totalClicks)} />
-          </div>
+          <Tabs
+            active={view}
+            onChange={setView}
+            tabs={[
+              { key: "performance", label: "ביצועים" },
+              { key: "audit", label: "בריאות החשבון" },
+            ]}
+          />
 
-          <Card className="mb-6">
-            <CardBody>
-              <h3 className="mb-4 font-semibold text-slate-900">מגמת הוצאה ולידים</h3>
-              <SpendChart data={(series ?? []).map((r: any) => ({ date: r.date, spend: r.spend, leads: r.leads }))} />
-            </CardBody>
-          </Card>
+          {view === "audit" ? (
+            <AccountAudit clientId={clientId} />
+          ) : loading ? (
+            <Spinner className="mx-auto my-16 h-7 w-7 text-brand-600" />
+          ) : !overview ? (
+            <EmptyState title="אין נתונים" description="ודאו שהלקוח מחובר ל-Meta ושבוצע סנכרון." />
+          ) : (
+            <>
+              <div className="mb-6 grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-6">
+                <StatCard label="הוצאה" value={formatCurrency(overview.totalSpend * 100, overview.currency)} />
+                <StatCard label="לידים" value={formatNumber(overview.totalLeads)} accent="green" />
+                <StatCard label="CPL" value={formatMoney(overview.avgCpl, overview.currency)} />
+                <StatCard label="CTR" value={formatPercent(overview.avgCtr)} />
+                <StatCard label="CPC" value={formatMoney(overview.avgCpc, overview.currency)} />
+                <StatCard label="קליקים" value={formatNumber(overview.totalClicks)} />
+              </div>
 
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-            <RankCard title="קמפיינים מובילים" items={overview.bestCampaigns} currency={overview.currency} good />
-            <RankCard title="קמפיינים חלשים" items={overview.worstCampaigns} currency={overview.currency} />
-          </div>
+              <Card className="mb-6">
+                <CardBody>
+                  <h3 className="mb-4 font-semibold text-slate-900">מגמת הוצאה ולידים</h3>
+                  <SpendChart data={(series ?? []).map((r: any) => ({ date: r.date, spend: r.spend, leads: r.leads }))} />
+                </CardBody>
+              </Card>
+
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                <RankCard title="קמפיינים מובילים" items={overview.bestCampaigns} currency={overview.currency} good />
+                <RankCard title="קמפיינים חלשים" items={overview.worstCampaigns} currency={overview.currency} />
+              </div>
+            </>
+          )}
         </>
       )}
     </div>

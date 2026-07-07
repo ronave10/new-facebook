@@ -26,6 +26,12 @@ export class AnalyticsController {
     return this.analytics.clientOverview(user, id, datePreset);
   }
 
+  @Get("analytics/client/:id/audit")
+  @RequirePermission("analytics.read")
+  audit(@CurrentUser() user: AuthContext, @Param("id") id: string) {
+    return this.analytics.accountAudit(user, id);
+  }
+
   @Get("analytics/campaign/:id/timeseries")
   @RequirePermission("analytics.read")
   timeseries(

@@ -1,5 +1,6 @@
 import { Injectable } from "@nestjs/common";
 import type { DashboardOverview } from "@campaignos/shared";
+import { auditAccount, type AuditInput, type EntityMetrics } from "@campaignos/marketing-core";
 import { PrismaService } from "../core/prisma.service";
 import { AuthContext } from "../core/auth-context";
 import { AppException } from "../core/api-error";
@@ -106,6 +107,88 @@ export class AnalyticsService {
         .map((r) => ({ severity: r.severity, title: r.title, entityId: r.entityId ?? undefined })),
       actionList: recs.map((r) => ({ title: r.title, recommendationId: r.id })),
     };
+  }
+
+  /** Runs the deterministic Account Health Audit over the client's synced data. */
+  async accountAudit(user: AuthContext, clientId: string) {
+    this.assertScope(user, clientId);
+    const client = await this.prisma.client.findFirst({
+      where: { id: clientId, organizationId: user.organizationId },
+      include: { brandProfile: true },
+    });
+    if (!client) throw AppException.notFound("הלקוח לא נמצא");
+
+    const since = new Date();
+    since.setUTCDate(since.getUTCDate() - 14);
+
+    const [campaigns, snapshots, creatives, audiences, pixelCount] = await Promise.all([
+      this.prisma.campaign.findMany({
+        where: { organizationId: user.organizationId, clientId },
+        include: { _count: { select: { adSets: true, ads: true } } },
+      }),
+      this.prisma.performanceSnapshot.findMany({
+        where: { organizationId: user.organizationId, clientId, level: "CAMPAIGN", date: { gte: since } },
+      }),
+      this.prisma.adCreative.findMany({ where: { organizationId: user.organizationId, clientId }, select: { id: true } }),
+      this.prisma.metaCustomAudience.findMany({
+        where: { organizationId: user.organizationId, clientId },
+        select: { subtype: true },
+      }),
+      this.prisma.metaPixel.count({ where: { organizationId: user.organizationId } }),
+    ]);
+
+    // distinct variant styles used across the client's ads
+    const styleRows = await this.prisma.ad.findMany({
+      where: { organizationId: user.organizationId, campaign: { clientId } },
+      select: { variantStyle: true },
+    });
+    const distinctVariantStyles = new Set(styleRows.map((r) => r.variantStyle).filter(Boolean)).size;
+
+    // aggregate snapshots → EntityMetrics per campaign
+    const agg = new Map<string, { spend: number; leads: number; conversions: number; clicks: number; impressions: number; reach: number; days: Set<string> }>();
+    for (const s of snapshots) {
+      const a = agg.get(s.entityId) ?? { spend: 0, leads: 0, conversions: 0, clicks: 0, impressions: 0, reach: 0, days: new Set<string>() };
+      a.spend += Number(s.spend);
+      a.leads += s.leads;
+      a.conversions += s.conversions;
+      a.clicks += s.clicks;
+      a.impressions += s.impressions;
+      a.reach += s.reach;
+      a.days.add(s.date.toISOString().slice(0, 10));
+      agg.set(s.entityId, a);
+    }
+    const nameById = new Map(campaigns.map((c) => [c.id, c.name]));
+    const metrics: EntityMetrics[] = [...agg.entries()].map(([id, a]) => ({
+      entityId: id,
+      entityName: nameById.get(id) ?? id,
+      level: "CAMPAIGN",
+      spend: a.spend,
+      impressions: a.impressions,
+      clicks: a.clicks,
+      leads: a.leads,
+      conversions: a.conversions,
+      daysLive: a.days.size,
+      frequency: a.reach > 0 ? a.impressions / a.reach : undefined,
+      ctrPct: a.impressions > 0 ? (a.clicks / a.impressions) * 100 : undefined,
+    }));
+
+    const input: AuditInput = {
+      vertical: client.industry,
+      pixelConnected: pixelCount > 0,
+      distinctCreatives: creatives.length,
+      distinctVariantStyles,
+      hasRemarketingAudience: audiences.some((a) => a.subtype === "WEBSITE" || a.subtype === "ENGAGEMENT"),
+      hasLookalikeAudience: audiences.some((a) => a.subtype === "LOOKALIKE"),
+      campaigns: campaigns.map((c) => ({
+        id: c.id,
+        name: c.name,
+        status: c.status,
+        adSetCount: c._count.adSets,
+        adCount: c._count.ads,
+      })),
+      metrics,
+    };
+    return auditAccount(input);
   }
 
   async campaignTimeseries(user: AuthContext, campaignId: string, granularity = "DAY") {

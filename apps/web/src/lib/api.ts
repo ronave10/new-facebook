@@ -157,6 +157,7 @@ export const api = {
     get<DashboardOverview>(`/analytics/client/${clientId}?datePreset=${datePreset}`),
   timeseries: (campaignId: string, granularity = "DAY") =>
     get<any[]>(`/analytics/campaign/${campaignId}/timeseries?granularity=${granularity}`),
+  accountAudit: (clientId: string) => get<any>(`/analytics/client/${clientId}/audit`),
   recommendations: (clientId?: string, status?: string) =>
     get<any[]>(`/recommendations${clientId ? `?clientId=${clientId}` : ""}${status ? `${clientId ? "&" : "?"}status=${status}` : ""}`),
   generateRecommendations: (clientId: string) => post<any[]>("/recommendations/generate", { clientId }),
