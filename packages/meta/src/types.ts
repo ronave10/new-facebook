@@ -195,6 +195,24 @@ export interface AdLibraryQuery {
   limit?: number;
 }
 
+/** A Meta detailed-targeting item (interest / behavior / demographic). */
+export interface MetaInterest {
+  id: string;
+  name: string;
+  type: "interests" | "behaviors" | "demographics" | "work_positions" | "industries";
+  /** Approximate reachable audience size (lower/upper bound). */
+  audienceSizeLower?: number;
+  audienceSizeUpper?: number;
+  /** Disambiguation path, e.g. ["Business", "Marketing"]. */
+  path?: string[];
+  topic?: string;
+}
+
+export interface InterestSearchQuery {
+  q: string;
+  limit?: number;
+}
+
 export type CustomAudienceSubtype = "WEBSITE" | "ENGAGEMENT" | "CUSTOM" | "LOOKALIKE";
 
 export interface MetaCustomAudienceInfo {

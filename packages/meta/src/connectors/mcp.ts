@@ -18,9 +18,11 @@ import type {
   CreateCustomAudienceSpec,
   MetaCustomAudienceInfo,
   MetaInsightsRow,
+  MetaInterest,
   MetaLeadInfo,
   MetaPageInfo,
   MetaPixelInfo,
+  InterestSearchQuery,
 } from "../types";
 
 /**
@@ -300,6 +302,23 @@ export class McpMetaConnector implements MetaConnector {
       adSnapshotUrl: a.ad_snapshot_url,
       publisherPlatforms: a.publisher_platforms,
       createdTime: a.ad_creation_time ?? a.ad_delivery_start_time,
+    }));
+  }
+
+  async searchInterests(_ctx: MetaConnectorContext, query: InterestSearchQuery): Promise<MetaInterest[]> {
+    const res = await this.transport.callTool("ads_get_field_context", {
+      field: "targeting.interests",
+      q: query.q,
+      limit: query.limit ?? 20,
+    });
+    return arr(res).map((r) => ({
+      id: String(r.id ?? ""),
+      name: r.name ?? "",
+      type: (r.type ?? "interests") as MetaInterest["type"],
+      audienceSizeLower: r.audience_size_lower_bound ?? r.audience_size,
+      audienceSizeUpper: r.audience_size_upper_bound,
+      path: r.path,
+      topic: r.topic,
     }));
   }
 

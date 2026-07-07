@@ -7,6 +7,7 @@ import { api, ApiError } from "@/lib/api";
 import { useApi } from "@/lib/useApi";
 import { useToast } from "@/components/ui/Toast";
 import { Button, Card, CardBody, Input, Label, PageHeader, Select, Spinner } from "@/components/ui";
+import { InterestPicker, type Interest } from "@/components/campaigns/InterestPicker";
 
 function NewCampaignInner() {
   const router = useRouter();
@@ -25,6 +26,7 @@ function NewCampaignInner() {
     countries: "IL",
     ageMin: 25,
     ageMax: 55,
+    interests: [] as Interest[],
   });
   const set = (k: string, v: any) => setForm((f) => ({ ...f, [k]: v }));
   const [saving, setSaving] = useState(false);
@@ -46,6 +48,7 @@ function NewCampaignInner() {
           countries: form.countries.split(",").map((c) => c.trim()),
           ageMin: form.ageMin,
           ageMax: form.ageMax,
+          interests: form.interests.map((i) => ({ id: i.id, name: i.name })),
         },
       });
       toast("טיוטת הקמפיין נוצרה", "success");
@@ -121,6 +124,11 @@ function NewCampaignInner() {
               <Input type="number" value={form.ageMax} onChange={(e) => set("ageMax", Number(e.target.value))} />
             </div>
           </div>
+          <InterestPicker
+            clientId={form.clientId}
+            selected={form.interests}
+            onChange={(v) => set("interests", v)}
+          />
           <div className="rounded-xl bg-slate-50 px-4 py-3 text-xs text-slate-500">
             💡 Advantage+ Audience יופעל כברירת מחדל. ניתן לייצר אסטרטגיה ומודעות עם AI לאחר יצירת הטיוטה.
           </div>

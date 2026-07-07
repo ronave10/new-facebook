@@ -72,6 +72,18 @@ describe("MockMetaConnector", () => {
     expect(lead.fieldData.some((f) => f.name === "email")).toBe(true);
   });
 
+  it("searches detailed-targeting interests filtered by query", async () => {
+    const c: MetaConnector = new MockMetaConnector();
+    const hits = await c.searchInterests(ctx, { q: "כושר" });
+    expect(hits.length).toBeGreaterThan(0);
+    expect(hits.some((h) => h.name.includes("כושר"))).toBe(true);
+    expect(hits[0].audienceSizeLower).toBeGreaterThan(0);
+    expect(hits[0].audienceSizeUpper).toBeGreaterThanOrEqual(hits[0].audienceSizeLower!);
+    // deterministic
+    const again = await c.searchInterests(ctx, { q: "כושר" });
+    expect(again).toEqual(hits);
+  });
+
   it("searches the ad library for competitor ads", async () => {
     const c: MetaConnector = new MockMetaConnector();
     const ads = await c.searchAdLibrary(ctx, { searchTerms: "רפואת שיניים", countries: ["IL"] });

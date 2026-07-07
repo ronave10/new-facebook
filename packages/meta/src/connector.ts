@@ -17,9 +17,11 @@ import type {
   MetaIgAccountInfo,
   MetaInsightsQuery,
   MetaInsightsRow,
+  MetaInterest,
   MetaLeadInfo,
   MetaPageInfo,
   MetaPixelInfo,
+  InterestSearchQuery,
 } from "./types";
 
 /**
@@ -101,6 +103,9 @@ export interface MetaConnector {
 
   /** Search the public Ad Library for competitor ads (competitor intelligence). */
   searchAdLibrary(ctx: MetaConnectorContext, query: AdLibraryQuery): Promise<AdLibraryAd[]>;
+
+  /** Search Meta's detailed-targeting taxonomy (interests/behaviors) for ad set targeting. */
+  searchInterests(ctx: MetaConnectorContext, query: InterestSearchQuery): Promise<MetaInterest[]>;
 
   // ── Custom audiences (remarketing / lookalikes) ──
   listCustomAudiences(ctx: MetaConnectorContext, adAccountId: string): Promise<MetaCustomAudienceInfo[]>;

@@ -138,6 +138,8 @@ export const api = {
   metaDisconnect: (id: string) => del<any>(`/meta/connections/${id}`),
   metaRefresh: (id: string) => post<any>(`/meta/connections/${id}/refresh`),
   metaSync: (clientId: string) => post<any>(`/meta/sync/${clientId}`),
+  metaInterests: (clientId: string, q: string) =>
+    get<any[]>(`/meta/interests?clientId=${clientId}&q=${encodeURIComponent(q)}`),
 
   // campaigns
   campaigns: (clientId?: string, status?: string, page = 1) =>

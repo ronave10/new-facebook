@@ -20,9 +20,11 @@ import {
   type CreateCustomAudienceSpec,
   type MetaCustomAudienceInfo,
   type MetaInsightsRow,
+  type MetaInterest,
   type MetaLeadInfo,
   type MetaPageInfo,
   type MetaPixelInfo,
+  type InterestSearchQuery,
 } from "../types";
 
 export interface MarketingApiOptions {
@@ -417,6 +419,23 @@ export class MarketingApiConnector implements MetaConnector {
       adSnapshotUrl: a.ad_snapshot_url,
       publisherPlatforms: a.publisher_platforms,
       createdTime: a.ad_creation_time,
+    }));
+  }
+
+  async searchInterests(ctx: MetaConnectorContext, query: InterestSearchQuery): Promise<MetaInterest[]> {
+    const res = await this.get<{ data: any[] }>(ctx, "/search", {
+      type: "adinterest",
+      q: query.q,
+      limit: String(query.limit ?? 20),
+    });
+    return (res.data ?? []).map((r) => ({
+      id: String(r.id),
+      name: r.name,
+      type: (r.type ?? "interests") as MetaInterest["type"],
+      audienceSizeLower: r.audience_size_lower_bound ?? r.audience_size,
+      audienceSizeUpper: r.audience_size_upper_bound,
+      path: r.path,
+      topic: r.topic,
     }));
   }
 

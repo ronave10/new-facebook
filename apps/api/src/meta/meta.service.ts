@@ -317,4 +317,26 @@ export class MetaService {
       orderBy: { name: "asc" },
     });
   }
+
+  /**
+   * Search Meta's detailed-targeting taxonomy for ad set targeting. Uses the
+   * client's connected account for auth when present; falls back to the connector
+   * directly (mock returns a demo catalog) so the picker works pre-connection.
+   */
+  async searchInterests(user: AuthContext, clientId: string, q: string) {
+    const connection = await this.prisma.metaConnection.findFirst({
+      where: { organizationId: user.organizationId, clientId, status: "CONNECTED" },
+    });
+    const query = { q, limit: 20 };
+    if (connection) {
+      const ctx = await this.context(user.organizationId, connection.id);
+      return this.logger.wrap(
+        { organizationId: user.organizationId, connectionId: connection.id, operation: "searchInterests" },
+        () => this.factory.get().searchInterests(ctx, query),
+      );
+    }
+    return this.factory
+      .get()
+      .searchInterests({ accessToken: "", organizationId: user.organizationId }, query);
+  }
 }

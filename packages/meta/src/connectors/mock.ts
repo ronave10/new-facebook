@@ -18,9 +18,11 @@ import type {
   MetaCustomAudienceInfo,
   MetaInsightsQuery,
   MetaInsightsRow,
+  MetaInterest,
   MetaLeadInfo,
   MetaPageInfo,
   MetaPixelInfo,
+  InterestSearchQuery,
 } from "../types";
 
 interface MockEntity {
@@ -343,6 +345,44 @@ export class MockMetaConnector implements MetaConnector {
         adSnapshotUrl: `https://facebook.com/ads/library/?id=mock_${i}`,
         publisherPlatforms: ["facebook", "instagram"],
         createdTime: isoDaysAgo(Math.round(r * 30)),
+      };
+    });
+  }
+
+  async searchInterests(_ctx: MetaConnectorContext, query: InterestSearchQuery): Promise<MetaInterest[]> {
+    const q = (query.q ?? "").trim();
+    // A small Israeli-market detailed-targeting catalog. Real connectors hit
+    // Graph /search?type=adinterest; the mock filters this catalog by substring.
+    const catalog: { name: string; type: MetaInterest["type"]; topic: string; syn: string[] }[] = [
+      { name: "רפואת שיניים", type: "interests", topic: "בריאות", syn: ["שיניים", "יישור", "השתלות", "dentist"] },
+      { name: "כושר ואימונים", type: "interests", topic: "ספורט", syn: ["כושר", "חדר כושר", "פיטנס", "fitness", "אימון"] },
+      { name: "יזמות עסקית", type: "interests", topic: "עסקים", syn: ["עסק", "יזם", "סטארטאפ", "business", "עצמאי"] },
+      { name: "נדל\"ן", type: "interests", topic: "נדל\"ן", syn: ["דירה", "השקעה", "נדלן", "real estate", "מגורים"] },
+      { name: "יופי וטיפוח", type: "interests", topic: "אופנה ויופי", syn: ["יופי", "קוסמטיקה", "אסתטיקה", "beauty", "טיפוח"] },
+      { name: "הורים לילדים קטנים", type: "demographics", topic: "משפחה", syn: ["הורים", "תינוק", "ילדים", "parents", "אמהות"] },
+      { name: "מנהלי שיווק", type: "work_positions", topic: "עבודה", syn: ["שיווק", "מנהל", "marketing", "דיגיטל"] },
+      { name: "קונים אונליין (התנהגות)", type: "behaviors", topic: "התנהגות רכישה", syn: ["קניות", "אונליין", "רכישה", "online", "צרכנים"] },
+      { name: "תיירות ונופש", type: "interests", topic: "פנאי", syn: ["טיול", "חופשה", "תיירות", "travel", "מלון"] },
+      { name: "מזון ומסעדות", type: "interests", topic: "אוכל", syn: ["מסעדה", "אוכל", "שף", "food", "משלוחים"] },
+    ];
+    const matches = q
+      ? catalog.filter(
+          (c) => c.name.includes(q) || c.topic.includes(q) || c.syn.some((s) => s.includes(q) || q.includes(s)),
+        )
+      : catalog;
+    const pool = matches.length ? matches : catalog;
+    const limit = Math.min(query.limit ?? 12, pool.length);
+    return pool.slice(0, limit).map((c, i) => {
+      const r = seed01(`${q}-${c.name}-${i}`);
+      const lower = Math.round(50_000 + r * 900_000);
+      return {
+        id: `mock_int_${Math.round(seed01(c.name) * 1e9)}`,
+        name: c.name,
+        type: c.type,
+        audienceSizeLower: lower,
+        audienceSizeUpper: Math.round(lower * (1.4 + r)),
+        path: [c.topic, c.name],
+        topic: c.topic,
       };
     });
   }

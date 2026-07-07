@@ -100,4 +100,15 @@ export class MetaController {
     await this.sync.enqueueSync(user.organizationId, clientId);
     return { ok: true, message: "סנכרון נתונים החל ברקע" };
   }
+
+  @Get("interests")
+  @RequirePermission("meta.read")
+  interests(
+    @CurrentUser() user: AuthContext,
+    @Query("clientId") clientId: string,
+    @Query("q") q = "",
+  ) {
+    if (!clientId) throw AppException.badRequest("חסר clientId");
+    return this.meta.searchInterests(user, clientId, q.trim());
+  }
 }
