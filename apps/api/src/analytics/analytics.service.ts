@@ -10,6 +10,7 @@ import {
 import { PrismaService } from "../core/prisma.service";
 import { AuthContext } from "../core/auth-context";
 import { AppException } from "../core/api-error";
+import { renderAuditReport } from "./audit-report.template";
 
 function daysForPreset(preset?: string): number {
   switch (preset) {
@@ -195,6 +196,27 @@ export class AnalyticsService {
       metrics,
     };
     return auditAccount(input);
+  }
+
+  /** Renders the Account Health Audit as a self-contained, printable HTML report. */
+  async auditReportHtml(user: AuthContext, clientId: string): Promise<string> {
+    const audit = await this.accountAudit(user, clientId);
+    const [client, org] = await Promise.all([
+      this.prisma.client.findFirst({
+        where: { id: clientId, organizationId: user.organizationId },
+        select: { name: true, industry: true },
+      }),
+      this.prisma.organization.findUnique({
+        where: { id: user.organizationId },
+        select: { name: true },
+      }),
+    ]);
+    return renderAuditReport(audit, {
+      clientName: client?.name ?? "לקוח",
+      industry: client?.industry ?? null,
+      orgName: org?.name ?? null,
+      generatedAt: new Date(),
+    });
   }
 
   async campaignTimeseries(user: AuthContext, campaignId: string, granularity = "DAY") {

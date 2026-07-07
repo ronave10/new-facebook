@@ -1,8 +1,10 @@
 "use client";
 
-import { api } from "@/lib/api";
+import { useState } from "react";
+import { api, ApiError } from "@/lib/api";
 import { useApi } from "@/lib/useApi";
-import { Card, CardBody, EmptyState, Spinner } from "@/components/ui";
+import { useToast } from "@/components/ui/Toast";
+import { Button, Card, CardBody, EmptyState, Spinner } from "@/components/ui";
 import { SeverityBadge } from "@/components/StatusBadge";
 
 const GRADE_COLOR: Record<string, string> = {
@@ -47,12 +49,36 @@ function ScoreGauge({ score, grade }: { score: number; grade: string }) {
 
 export function AccountAudit({ clientId }: { clientId: string }) {
   const { data, loading, error } = useApi(() => api.accountAudit(clientId), [clientId]);
+  const { toast } = useToast();
+  const [exporting, setExporting] = useState(false);
+
+  async function exportReport() {
+    setExporting(true);
+    try {
+      const html = await api.auditReportHtml(clientId);
+      const url = URL.createObjectURL(new Blob([html], { type: "text/html" }));
+      const win = window.open(url, "_blank");
+      if (!win) toast("החלון נחסם — אשרו חלונות קופצים כדי לצפות בדוח", "error");
+      // Revoke after the tab has had time to load the document.
+      setTimeout(() => URL.revokeObjectURL(url), 60000);
+    } catch (err) {
+      toast(err instanceof ApiError ? err.message : "הפקת הדוח נכשלה", "error");
+    } finally {
+      setExporting(false);
+    }
+  }
 
   if (loading) return <Spinner className="mx-auto my-16 h-7 w-7 text-brand-600" />;
   if (error || !data) return <EmptyState title="לא ניתן להריץ בדיקה" description={error ?? "ודאו שהלקוח מחובר ומסונכרן."} />;
 
   return (
     <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div className="text-sm text-slate-500">בדיקת בריאות דטרמיניסטית על נתוני 14 הימים האחרונים</div>
+        <Button variant="secondary" onClick={exportReport} loading={exporting}>
+          📄 הפקת דוח PDF
+        </Button>
+      </div>
       <Card>
         <CardBody className="flex flex-col items-center gap-6 md:flex-row md:items-center">
           <ScoreGauge score={data.score} grade={data.grade} />

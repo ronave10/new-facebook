@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, Query } from "@nestjs/common";
+import { Body, Controller, Get, Header, Param, Post, Query } from "@nestjs/common";
 import {
   decideRecommendationSchema,
   generateRecommendationsSchema,
@@ -30,6 +30,14 @@ export class AnalyticsController {
   @RequirePermission("analytics.read")
   audit(@CurrentUser() user: AuthContext, @Param("id") id: string) {
     return this.analytics.accountAudit(user, id);
+  }
+
+  // Returns a self-contained printable HTML report (client-ready deliverable).
+  @Get("analytics/client/:id/audit/report")
+  @RequirePermission("analytics.read")
+  @Header("Content-Type", "text/html; charset=utf-8")
+  auditReport(@CurrentUser() user: AuthContext, @Param("id") id: string) {
+    return this.analytics.auditReportHtml(user, id);
   }
 
   @Get("analytics/campaign/:id/timeseries")

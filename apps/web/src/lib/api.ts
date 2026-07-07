@@ -82,6 +82,22 @@ async function tryRefresh(): Promise<boolean> {
   }
 }
 
+/** GET returning raw text (e.g. an HTML report) instead of parsed JSON. */
+async function getText(path: string): Promise<string> {
+  const access = getAccess();
+  const headers: Record<string, string> = {};
+  if (access) headers.Authorization = `Bearer ${access}`;
+  let res = await fetch(`${BASE}${path}`, { method: "GET", headers });
+  if (res.status === 401 && getRefresh()) {
+    if (await tryRefresh()) {
+      const a = getAccess();
+      res = await fetch(`${BASE}${path}`, { method: "GET", headers: a ? { Authorization: `Bearer ${a}` } : {} });
+    }
+  }
+  if (!res.ok) throw new ApiError(res.status, "הפקת הדוח נכשלה");
+  return res.text();
+}
+
 const get = <T>(path: string) => rawRequest<T>(path, { method: "GET" });
 const post = <T>(path: string, body?: unknown) =>
   rawRequest<T>(path, { method: "POST", body: body ? JSON.stringify(body) : undefined });
@@ -167,6 +183,7 @@ export const api = {
     get<any[]>(`/analytics/campaign/${campaignId}/timeseries?granularity=${granularity}`),
   campaignAbTest: (campaignId: string) => get<any>(`/analytics/campaign/${campaignId}/ab-test`),
   accountAudit: (clientId: string) => get<any>(`/analytics/client/${clientId}/audit`),
+  auditReportHtml: (clientId: string) => getText(`/analytics/client/${clientId}/audit/report`),
   recommendations: (clientId?: string, status?: string) =>
     get<any[]>(`/recommendations${clientId ? `?clientId=${clientId}` : ""}${status ? `${clientId ? "&" : "?"}status=${status}` : ""}`),
   generateRecommendations: (clientId: string) => post<any[]>("/recommendations/generate", { clientId }),
