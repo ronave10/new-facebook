@@ -12,6 +12,8 @@ import type {
   MetaCreativeInfo,
   MetaEntityType,
   MetaIgAccountInfo,
+  AdLibraryAd,
+  AdLibraryQuery,
   CreateCustomAudienceSpec,
   MetaCustomAudienceInfo,
   MetaInsightsQuery,
@@ -322,6 +324,27 @@ export class MockMetaConnector implements MetaConnector {
 
   async deleteCustomAudience(_ctx: MetaConnectorContext, audienceId: string): Promise<void> {
     this.audiences.delete(audienceId);
+  }
+
+  async searchAdLibrary(_ctx: MetaConnectorContext, query: AdLibraryQuery): Promise<AdLibraryAd[]> {
+    const term = query.searchTerms ?? "עסק";
+    const competitors = ["המתחרה המוביל", "רשת ארצית", "מכון פרימיום", "שירות מקומי"];
+    return competitors.map((name, i) => {
+      const r = seed01(`${term}-${i}`);
+      return {
+        pageId: `mock_comp_${i}`,
+        pageName: name,
+        adCreativeBodies: [
+          i % 2 === 0
+            ? `${term} במחיר הטוב ביותר! הצטרפו עכשיו וקבלו הנחה מיוחדת. מקומות מוגבלים.`
+            : `למה לבחור בנו? ${Math.round(r * 500 + 100)} לקוחות מרוצים, שירות אישי, תוצאות מוכחות.`,
+        ],
+        adCreativeTitles: [i % 2 === 0 ? "מבצע השקה" : "המומחים שלך"],
+        adSnapshotUrl: `https://facebook.com/ads/library/?id=mock_${i}`,
+        publisherPlatforms: ["facebook", "instagram"],
+        createdTime: isoDaysAgo(Math.round(r * 30)),
+      };
+    });
   }
 
   async getLead(_ctx: MetaConnectorContext, leadId: string): Promise<MetaLeadInfo> {

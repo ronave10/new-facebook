@@ -13,6 +13,7 @@ import { ZodValidationPipe } from "../core/zod-validation.pipe";
 import { ClientsService } from "./clients.service";
 import { PersonasService } from "./personas.service";
 import { OffersCompetitorsService } from "./offers-competitors.service";
+import { ResearchService } from "./research.service";
 
 @Controller()
 export class ClientsController {
@@ -20,6 +21,7 @@ export class ClientsController {
     private readonly clients: ClientsService,
     private readonly personas: PersonasService,
     private readonly oc: OffersCompetitorsService,
+    private readonly research: ResearchService,
   ) {}
 
   // ── Clients ──
@@ -93,6 +95,13 @@ export class ClientsController {
   @RequirePermission("persona.write")
   deletePersona(@CurrentUser() user: AuthContext, @Param("id") id: string) {
     return this.personas.remove(user, id);
+  }
+
+  // ── Competitor research (Ad Library intelligence) ──
+  @Post("clients/:id/research")
+  @RequirePermission("persona.generate")
+  runResearch(@CurrentUser() user: AuthContext, @Param("id") id: string) {
+    return this.research.runCompetitorResearch(user, id);
   }
 
   // ── Offers ──

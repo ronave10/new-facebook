@@ -178,6 +178,23 @@ export interface MetaLeadInfo {
   fieldData: { name: string; values: string[] }[];
 }
 
+export interface AdLibraryAd {
+  pageId: string;
+  pageName: string;
+  adCreativeBodies: string[];
+  adCreativeTitles: string[];
+  adSnapshotUrl?: string;
+  publisherPlatforms?: string[];
+  createdTime?: string;
+}
+
+export interface AdLibraryQuery {
+  searchTerms?: string;
+  pageIds?: string[];
+  countries?: string[];
+  limit?: number;
+}
+
 export type CustomAudienceSubtype = "WEBSITE" | "ENGAGEMENT" | "CUSTOM" | "LOOKALIKE";
 
 export interface MetaCustomAudienceInfo {

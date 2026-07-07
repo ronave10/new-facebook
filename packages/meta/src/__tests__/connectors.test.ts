@@ -71,6 +71,14 @@ describe("MockMetaConnector", () => {
     expect(lead.leadId).toBe("lead_123");
     expect(lead.fieldData.some((f) => f.name === "email")).toBe(true);
   });
+
+  it("searches the ad library for competitor ads", async () => {
+    const c: MetaConnector = new MockMetaConnector();
+    const ads = await c.searchAdLibrary(ctx, { searchTerms: "רפואת שיניים", countries: ["IL"] });
+    expect(ads.length).toBeGreaterThan(0);
+    expect(ads[0].pageName).toBeTruthy();
+    expect(ads[0].adCreativeBodies.length).toBeGreaterThan(0);
+  });
 });
 
 describe("mapGraphError", () => {

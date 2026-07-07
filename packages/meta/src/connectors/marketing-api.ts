@@ -15,6 +15,8 @@ import {
   type MetaEntityType,
   type MetaIgAccountInfo,
   type MetaInsightsQuery,
+  type AdLibraryAd,
+  type AdLibraryQuery,
   type CreateCustomAudienceSpec,
   type MetaCustomAudienceInfo,
   type MetaInsightsRow,
@@ -394,6 +396,28 @@ export class MarketingApiConnector implements MetaConnector {
     await this.raw(`${this.base}/${audienceId}?access_token=${encodeURIComponent(ctx.accessToken)}`, {
       method: "DELETE",
     });
+  }
+
+  async searchAdLibrary(ctx: MetaConnectorContext, query: AdLibraryQuery): Promise<AdLibraryAd[]> {
+    const params: Record<string, string> = {
+      ad_type: "ALL",
+      ad_active_status: "ACTIVE",
+      fields: "page_id,page_name,ad_creative_bodies,ad_creative_link_titles,ad_snapshot_url,publisher_platforms,ad_creation_time",
+      limit: String(query.limit ?? 25),
+    };
+    if (query.searchTerms) params.search_terms = query.searchTerms;
+    if (query.pageIds?.length) params.search_page_ids = query.pageIds.join(",");
+    params.ad_reached_countries = JSON.stringify(query.countries ?? ["IL"]);
+    const res = await this.get<{ data: any[] }>(ctx, "/ads_archive", params);
+    return (res.data ?? []).map((a) => ({
+      pageId: a.page_id,
+      pageName: a.page_name,
+      adCreativeBodies: a.ad_creative_bodies ?? [],
+      adCreativeTitles: a.ad_creative_link_titles ?? [],
+      adSnapshotUrl: a.ad_snapshot_url,
+      publisherPlatforms: a.publisher_platforms,
+      createdTime: a.ad_creation_time,
+    }));
   }
 
   async getLead(ctx: MetaConnectorContext, leadId: string): Promise<MetaLeadInfo> {

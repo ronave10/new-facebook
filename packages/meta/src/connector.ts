@@ -1,4 +1,6 @@
 import type {
+  AdLibraryAd,
+  AdLibraryQuery,
   CreateAdSetSpec,
   CreateAdSpec,
   CreateCampaignSpec,
@@ -96,6 +98,9 @@ export interface MetaConnector {
 
   /** Fetch a single Lead Ad submission by its lead id (leadgen webhook payload). */
   getLead(ctx: MetaConnectorContext, leadId: string): Promise<MetaLeadInfo>;
+
+  /** Search the public Ad Library for competitor ads (competitor intelligence). */
+  searchAdLibrary(ctx: MetaConnectorContext, query: AdLibraryQuery): Promise<AdLibraryAd[]>;
 
   // ── Custom audiences (remarketing / lookalikes) ──
   listCustomAudiences(ctx: MetaConnectorContext, adAccountId: string): Promise<MetaCustomAudienceInfo[]>;

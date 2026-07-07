@@ -116,6 +116,9 @@ export const api = {
   archiveClient: (id: string) => del<any>(`/clients/${id}`),
   saveBrandProfile: (id: string, b: BrandProfileInput) => put<any>(`/clients/${id}/brand-profile`, b),
 
+  // competitor research
+  runResearch: (clientId: string) => post<any>(`/clients/${clientId}/research`),
+
   // personas
   personas: (clientId: string) => get<any[]>(`/clients/${clientId}/personas`),
   generatePersonas: (clientId: string, count = 4) =>

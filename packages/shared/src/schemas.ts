@@ -126,6 +126,16 @@ export const generatePersonasSchema = z.object({
   count: z.number().int().min(3).max(5).optional().default(4),
 });
 
+// ─────────────────────────── Research (agent output) ───────────────────────────
+
+export const researchSchema = z.object({
+  marketSummary: z.string(),
+  competitorInsights: z.array(z.string()),
+  opportunities: z.array(z.string()),
+  recommendedAngles: z.array(z.string()),
+});
+export type ResearchSchema = z.infer<typeof researchSchema>;
+
 // ─────────────────────────── Strategy (agent output) ───────────────────────────
 
 export const strategySchema = z.object({

@@ -11,6 +11,7 @@ import { ClientStatusBadge, MetaStatusBadge, CampaignStatusBadge } from "@/compo
 import { MediaLibrary } from "@/components/clients/MediaLibrary";
 import { LeadsInbox } from "@/components/clients/LeadsInbox";
 import { AudiencesManager } from "@/components/clients/AudiencesManager";
+import { ResearchPanel } from "@/components/clients/ResearchPanel";
 import { formatNumber } from "@/lib/format";
 
 export default function ClientDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -40,6 +41,7 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
         tabs={[
           { key: "overview", label: "סקירה" },
           { key: "brand", label: "פרופיל מותג" },
+          { key: "research", label: "מחקר מתחרים" },
           { key: "personas", label: "פרסונות" },
           { key: "media", label: "מדיה" },
           { key: "leads", label: "לידים" },
@@ -51,6 +53,7 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
 
       {tab === "overview" && <OverviewTab client={client} />}
       {tab === "brand" && <BrandTab client={client} onSaved={reload} />}
+      {tab === "research" && <ResearchPanel clientId={id} />}
       {tab === "personas" && <PersonasTab clientId={id} />}
       {tab === "media" && <MediaLibrary clientId={id} />}
       {tab === "leads" && <LeadsInbox clientId={id} />}

@@ -67,6 +67,18 @@ export function buildStrategyPrompt(
   return `בנה אסטרטגיית קמפיין ל-Meta עבור העסק הבא.\n\n${brandBlock(b)}\n\nמטרת הקמפיין: ${goal}\nתקציב יומי: ₪${budgetDailyIls}\nפרסונות: ${personaNames.join(", ") || "טרם הוגדרו"}\n\nהתאם את המבנה למדרגת התקציב: מתחת ל-₪100 — קמפיין יחיד וקהל רחב; ₪100-500 — פרוספקטינג + רימרקטינג (רק אם יש פיקסל) + טסטינג; ₪500+ — מבנה מלא TOF/MOF/BOF. כלול: סיכום, מבנה קמפיינים עם חלוקת תקציב ושלב משפך, תוכנית A/B (משתנה בודד עם השערה בפורמט 'אנחנו מאמינים ש...כי...'), KPIs, וחוקי כיבוי/סקייל/רענון עם מינימומים סטטיסטיים (למשל: כבה אחרי הוצאה של פי 3 מיעד ה-CPL ללא המרות). החזר JSON.`;
 }
 
+export function buildResearchPrompt(
+  b: BrandContext,
+  competitorAds: { pageName: string; bodies: string[]; titles: string[] }[],
+): string {
+  const adsBlock = competitorAds.length
+    ? competitorAds
+        .map((a, i) => `${i + 1}. ${a.pageName}: "${a.titles.join(" / ")}" — ${a.bodies.join(" ")}`.slice(0, 300))
+        .join("\n")
+    : "לא נמצאו מודעות מתחרים.";
+  return `נתח את השוק והמתחרים עבור העסק הבא, על בסיס מודעות אמיתיות שנאספו מ-Meta Ad Library.\n\n${brandBlock(b)}\n\nמודעות מתחרים שנמצאו:\n${adsBlock}\n\nהחזר JSON עם: marketSummary (סיכום שוק קצר), competitorInsights (מערך תובנות — אילו זוויות/הבטחות המתחרים משתמשים בהן), opportunities (מערך הזדמנויות — פערים שהעסק יכול לנצל, זוויות שאיש לא תופס), recommendedAngles (מערך זוויות מומלצות לבידול). היה חד וספציפי לשוק הישראלי.`;
+}
+
 export function buildAdsPrompt(b: BrandContext, personaNames: string[]): string {
   return `צור מנוע מודעות מלא ל-Meta עבור העסק הבא.\n\n${brandBlock(b)}\n\nפרסונות יעד: ${personaNames.join(", ") || "כללי"}\n\nהפק: 10 זוויות קמפיין, 10 hooks (עד 12 מילים כל אחד), 10 טקסטים ראשיים (במטריצת סגנונות: קצר/ארוך/רגשי/ישיר/מבוסס-הוכחה/מבוסס-כאב/מבוסס-חלום), 10 כותרות, 5 תיאורים, 5 CTAs, 5 רעיונות לתמונה, 5 רעיונות לוידאו קצר, ומערך adVariants (וריאציית מודעה מלאה לכל פרסונה) כאשר כל וריאציה כוללת: persona, angle, hook, primaryText, headline, description, cta, creativeBrief (concept/visualDirection/textOnImage/format), complianceNotes, confidenceScore (0-100), whyItWorks, variantStyle. הקפד על ההגבלות ומדיניות הפרסום. החזר JSON.`;
 }

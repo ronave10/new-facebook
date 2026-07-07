@@ -13,6 +13,8 @@ import type {
   MetaEntityType,
   MetaIgAccountInfo,
   MetaInsightsQuery,
+  AdLibraryAd,
+  AdLibraryQuery,
   CreateCustomAudienceSpec,
   MetaCustomAudienceInfo,
   MetaInsightsRow,
@@ -281,6 +283,24 @@ export class McpMetaConnector implements MetaConnector {
 
   async deleteCustomAudience(_ctx: MetaConnectorContext, audienceId: string): Promise<void> {
     await this.transport.callTool("ads_delete_custom_audience", { audience_id: audienceId });
+  }
+
+  async searchAdLibrary(_ctx: MetaConnectorContext, query: AdLibraryQuery): Promise<AdLibraryAd[]> {
+    const res = await this.transport.callTool("ads_library_search", {
+      ...(query.searchTerms ? { search_terms: query.searchTerms } : {}),
+      ...(query.pageIds?.length ? { page_ids: query.pageIds } : {}),
+      countries: query.countries ?? ["IL"],
+      limit: query.limit ?? 25,
+    });
+    return arr(res).map((a) => ({
+      pageId: String(a.page_id ?? ""),
+      pageName: a.page_name ?? "",
+      adCreativeBodies: a.ad_creative_bodies ?? (a.ad_creative_body ? [a.ad_creative_body] : []),
+      adCreativeTitles: a.ad_creative_link_titles ?? [],
+      adSnapshotUrl: a.ad_snapshot_url,
+      publisherPlatforms: a.publisher_platforms,
+      createdTime: a.ad_creation_time ?? a.ad_delivery_start_time,
+    }));
   }
 
   async getLead(_ctx: MetaConnectorContext, leadId: string): Promise<MetaLeadInfo> {
