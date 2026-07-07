@@ -1,17 +1,42 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
-import { useApi } from "@/lib/useApi";
-import { Card, CardBody, EmptyState, Spinner } from "@/components/ui";
+import { Card, CardBody, EmptyState, Select, Spinner } from "@/components/ui";
 
 /**
- * A/B significance panel: shows the two highest-traffic variants in the campaign,
- * their conversion rates, and a two-proportion z-test verdict from marketing-core.
+ * A/B significance panel: shows the two compared variants, their conversion rates
+ * with Wilson confidence intervals, a two-proportion z-test verdict, a
+ * days-to-significance projection, and a picker to compare any two variants.
  */
 export function AbTestPanel({ campaignId }: { campaignId: string }) {
-  const { data, loading } = useApi(() => api.campaignAbTest(campaignId), [campaignId]);
+  const [data, setData] = useState<any | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [a, setA] = useState<string>("");
+  const [b, setB] = useState<string>("");
 
-  if (loading) return <Spinner className="mx-auto my-16 h-7 w-7 text-brand-600" />;
+  useEffect(() => {
+    let alive = true;
+    setLoading(true);
+    api
+      .campaignAbTest(campaignId, a || undefined, b || undefined)
+      .then((res) => {
+        if (!alive) return;
+        setData(res);
+        // seed the selectors with the compared pair on first load
+        if (res?.available && !a && !b) {
+          setA(res.variant?.id ?? "");
+          setB(res.control?.id ?? "");
+        }
+      })
+      .finally(() => alive && setLoading(false));
+    return () => {
+      alive = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [campaignId, a, b]);
+
+  if (loading && !data) return <Spinner className="mx-auto my-16 h-7 w-7 text-brand-600" />;
   if (!data || data.available === false) {
     return (
       <EmptyState
@@ -23,9 +48,38 @@ export function AbTestPanel({ campaignId }: { campaignId: string }) {
 
   const winnerId = data.winnerId as string | null;
   const pct = (n: number) => `${(n * 100).toFixed(2)}%`;
+  const roster: { id: string; label: string }[] = data.roster ?? [];
 
   return (
     <div className="space-y-4">
+      {roster.length > 2 && (
+        <Card>
+          <CardBody className="flex flex-wrap items-end gap-3">
+            <div className="min-w-[180px] flex-1">
+              <label className="mb-1 block text-xs text-slate-500">וריאציה A</label>
+              <Select value={a} onChange={(e) => setA(e.target.value)}>
+                {roster.map((r) => (
+                  <option key={r.id} value={r.id} disabled={r.id === b}>
+                    {r.label}
+                  </option>
+                ))}
+              </Select>
+            </div>
+            <div className="pb-2 text-slate-400">מול</div>
+            <div className="min-w-[180px] flex-1">
+              <label className="mb-1 block text-xs text-slate-500">וריאציה B</label>
+              <Select value={b} onChange={(e) => setB(e.target.value)}>
+                {roster.map((r) => (
+                  <option key={r.id} value={r.id} disabled={r.id === a}>
+                    {r.label}
+                  </option>
+                ))}
+              </Select>
+            </div>
+          </CardBody>
+        </Card>
+      )}
+
       <div
         className={`rounded-2xl border p-5 ${
           data.isSignificant ? "border-emerald-200 bg-emerald-50" : "border-amber-200 bg-amber-50"
@@ -47,6 +101,14 @@ export function AbTestPanel({ campaignId }: { campaignId: string }) {
           <span>
             שיפור יחסי: <b className="tabular">{data.relativeLiftPct?.toFixed(0)}%</b>
           </span>
+          <span dir="ltr" title="רווח סמך 95% להפרש המוחלט בין הוריאציות">
+            ΔCI₉₅ = <b className="tabular">[{(data.diffCiLower * 100).toFixed(2)}, {(data.diffCiUpper * 100).toFixed(2)}]</b> pp
+          </span>
+          {data.projectedDaysToSignificance != null && data.projectedDaysToSignificance > 0 && (
+            <span>
+              עד הכרעה: <b className="tabular">~{data.projectedDaysToSignificance} ימים</b>
+            </span>
+          )}
         </div>
         <p className="mt-2 text-sm text-slate-700">{data.recommendation}</p>
       </div>
@@ -66,6 +128,9 @@ export function AbTestPanel({ campaignId }: { campaignId: string }) {
                 )}
               </div>
               <div className="text-3xl font-bold text-brand-700 tabular">{pct(v.rate)}</div>
+              <div className="mt-0.5 text-xs text-slate-400 tabular" dir="ltr" title="רווח סמך Wilson 95%">
+                CI₉₅ {pct(v.ciLower)} – {pct(v.ciUpper)}
+              </div>
               <div className="mt-1 text-xs text-slate-500 tabular">
                 {v.successes.toLocaleString()} / {v.trials.toLocaleString()}
               </div>
@@ -74,7 +139,7 @@ export function AbTestPanel({ campaignId }: { campaignId: string }) {
         ))}
       </div>
       <p className="text-xs text-slate-400">
-        מבחן z לשתי פרופורציות ברמת {data.level === "AD" ? "מודעה" : "קבוצת מודעות"}. מובהקות ב-95% ({data.variantCount} וריאציות נבחנו).
+        מבחן z לשתי פרופורציות ברמת {data.level === "AD" ? "מודעה" : "קבוצת מודעות"}, רווחי סמך בשיטת Wilson. מובהקות ב-95% · נצפו {data.daysObserved} ימים · {data.variantCount} וריאציות.
       </p>
     </div>
   );

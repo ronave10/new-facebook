@@ -52,8 +52,13 @@ export class AnalyticsController {
 
   @Get("analytics/campaign/:id/ab-test")
   @RequirePermission("analytics.read")
-  abTest(@CurrentUser() user: AuthContext, @Param("id") id: string) {
-    return this.analytics.campaignAbTest(user, id);
+  abTest(
+    @CurrentUser() user: AuthContext,
+    @Param("id") id: string,
+    @Query("a") a?: string,
+    @Query("b") b?: string,
+  ) {
+    return this.analytics.campaignAbTest(user, id, { a, b });
   }
 
   @Post("recommendations/generate")

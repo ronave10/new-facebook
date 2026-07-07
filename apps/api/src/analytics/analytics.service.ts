@@ -2,6 +2,7 @@ import { Injectable } from "@nestjs/common";
 import type { DashboardOverview } from "@campaignos/shared";
 import {
   auditAccount,
+  evaluateByIds,
   evaluateTopTwo,
   type AbVariantInput,
   type AuditInput,
@@ -246,7 +247,7 @@ export class AnalyticsService {
    * two-proportion z-test. Metric is CVR (leads/clicks) when the campaign has leads,
    * else CTR (clicks/impressions) so it stays meaningful for traffic objectives.
    */
-  async campaignAbTest(user: AuthContext, campaignId: string) {
+  async campaignAbTest(user: AuthContext, campaignId: string, opts: { a?: string; b?: string } = {}) {
     const campaign = await this.prisma.campaign.findFirst({
       where: { id: campaignId, organizationId: user.organizationId },
     });
@@ -268,15 +269,17 @@ export class AnalyticsService {
       const ids = entities.map((e) => e.id);
       const snaps = await this.prisma.performanceSnapshot.findMany({
         where: { organizationId: user.organizationId, level: level as never, entityId: { in: ids } },
-        select: { entityId: true, impressions: true, clicks: true, leads: true },
+        select: { entityId: true, impressions: true, clicks: true, leads: true, date: true },
       });
       const agg = new Map<string, { impressions: number; clicks: number; leads: number }>();
+      const days = new Set<string>();
       for (const s of snaps) {
         const a = agg.get(s.entityId) ?? { impressions: 0, clicks: 0, leads: 0 };
         a.impressions += s.impressions;
         a.clicks += s.clicks;
         a.leads += s.leads;
         agg.set(s.entityId, a);
+        days.add(s.date.toISOString().slice(0, 10));
       }
       const withData = entities
         .map((e) => ({ e, m: agg.get(e.id) }))
@@ -293,17 +296,40 @@ export class AnalyticsService {
         successes: useCvr ? x.m.leads : x.m.clicks,
       }));
       const metric = useCvr ? "יחס המרה (לידים/קליקים)" : "CTR (קליקים/חשיפות)";
-      return { level, variants, metric };
+      return { level, variants, metric, days: Math.max(1, days.size) };
     };
 
     const built = (await buildVariants("AD")) ?? (await buildVariants("AD_SET"));
     if (!built) {
       return { available: false, message: "אין מספיק וריאציות עם דאטה להשוואת A/B בקמפיין זה." };
     }
-    const result = evaluateTopTwo(built.variants, built.metric);
+
+    // Daily trials/variant from the two variants that will be compared → days-to-significance.
+    const pair =
+      opts.a && opts.b
+        ? built.variants.filter((v) => v.id === opts.a || v.id === opts.b)
+        : [...built.variants].sort((x, y) => y.trials - x.trials).slice(0, 2);
+    const dailyTrialsPerVariant =
+      pair.length === 2 ? pair.reduce((s, v) => s + v.trials, 0) / 2 / built.days : undefined;
+
+    const result =
+      opts.a && opts.b
+        ? evaluateByIds(built.variants, opts.a, opts.b, built.metric, dailyTrialsPerVariant)
+        : evaluateTopTwo(built.variants, built.metric, dailyTrialsPerVariant);
     if (!result) {
       return { available: false, message: "אין מספיק תנועה בשתי וריאציות להשוואה." };
     }
-    return { available: true, level: built.level, variantCount: built.variants.length, ...result };
+    // Expose the full variant roster (id + label + trials) so the UI can offer explicit selection.
+    const roster = [...built.variants]
+      .sort((x, y) => y.trials - x.trials)
+      .map((v) => ({ id: v.id, label: v.label, trials: v.trials }));
+    return {
+      available: true,
+      level: built.level,
+      variantCount: built.variants.length,
+      daysObserved: built.days,
+      roster,
+      ...result,
+    };
   }
 }

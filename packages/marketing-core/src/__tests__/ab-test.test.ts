@@ -1,10 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
   evaluateAbTest,
+  evaluateByIds,
   evaluateTopTwo,
   normalCdf,
   requiredSampleSizePerVariant,
   twoProportionZTest,
+  wilsonInterval,
 } from "../ab-test";
 
 describe("normalCdf", () => {
@@ -66,6 +68,81 @@ describe("evaluateAbTest", () => {
     expect(res.sufficientSample).toBe(true);
     expect(res.isSignificant).toBe(false);
     expect(res.winnerId).toBeNull();
+  });
+});
+
+describe("wilsonInterval", () => {
+  it("brackets the point estimate and stays within [0,1]", () => {
+    const ci = wilsonInterval(50, 1000);
+    expect(ci.lower).toBeGreaterThan(0);
+    expect(ci.lower).toBeLessThan(0.05);
+    expect(ci.upper).toBeGreaterThan(0.05);
+    expect(ci.upper).toBeLessThanOrEqual(1);
+  });
+  it("returns zero-width at zero trials", () => {
+    expect(wilsonInterval(0, 0)).toEqual({ lower: 0, upper: 0 });
+  });
+  it("is wider for smaller samples", () => {
+    const wide = wilsonInterval(5, 100);
+    const narrow = wilsonInterval(500, 10000);
+    expect(wide.upper - wide.lower).toBeGreaterThan(narrow.upper - narrow.lower);
+  });
+});
+
+describe("evaluateAbTest — depth", () => {
+  it("attaches Wilson CIs and an absolute-difference CI that excludes 0 when significant", () => {
+    const res = evaluateAbTest(
+      { id: "a", label: "A", trials: 4000, successes: 240 },
+      { id: "b", label: "B", trials: 4000, successes: 120 },
+    );
+    expect(res.variant.ciLower).toBeLessThan(res.variant.rate);
+    expect(res.variant.ciUpper).toBeGreaterThan(res.variant.rate);
+    // significant → the 95% CI for the difference should not include 0
+    expect(res.diffCiLower).toBeGreaterThan(0);
+    expect(res.diffCiUpper).toBeGreaterThan(res.diffCiLower);
+  });
+
+  it("projects days-to-significance from the daily traffic rate when underpowered", () => {
+    // small-but-trending: 5% vs 6% at 20 trials/day/variant
+    const res = evaluateAbTest(
+      { id: "a", label: "A", trials: 200, successes: 10 },
+      { id: "b", label: "B", trials: 200, successes: 12 },
+      "יחס המרה",
+      20,
+    );
+    expect(res.sufficientSample).toBe(true);
+    expect(res.isSignificant).toBe(false);
+    expect(res.projectedDaysToSignificance).not.toBeNull();
+    expect(res.projectedDaysToSignificance!).toBeGreaterThan(0);
+    expect(res.recommendation).toContain("ימים");
+  });
+
+  it("reports 0 days once significant", () => {
+    const res = evaluateAbTest(
+      { id: "a", label: "A", trials: 4000, successes: 240 },
+      { id: "b", label: "B", trials: 4000, successes: 120 },
+      "m",
+      100,
+    );
+    expect(res.projectedDaysToSignificance).toBe(0);
+  });
+});
+
+describe("evaluateByIds", () => {
+  it("compares two explicitly-chosen variants", () => {
+    const vs = [
+      { id: "a", label: "A", trials: 4000, successes: 240 },
+      { id: "b", label: "B", trials: 4000, successes: 120 },
+      { id: "c", label: "C", trials: 9000, successes: 300 },
+    ];
+    const res = evaluateByIds(vs, "a", "b");
+    expect(res).not.toBeNull();
+    expect([res!.control.id, res!.variant.id].sort()).toEqual(["a", "b"]);
+  });
+  it("returns null for unknown or identical ids", () => {
+    const vs = [{ id: "a", label: "A", trials: 100, successes: 5 }];
+    expect(evaluateByIds(vs, "a", "a")).toBeNull();
+    expect(evaluateByIds(vs, "a", "zzz")).toBeNull();
   });
 });
 
