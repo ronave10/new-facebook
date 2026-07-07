@@ -13,6 +13,8 @@ import type {
   MetaEntityType,
   MetaIgAccountInfo,
   MetaInsightsQuery,
+  CreateCustomAudienceSpec,
+  MetaCustomAudienceInfo,
   MetaInsightsRow,
   MetaLeadInfo,
   MetaPageInfo,
@@ -247,6 +249,38 @@ export class McpMetaConnector implements MetaConnector {
       ...(fields.dailyBudget !== undefined ? { daily_budget: fields.dailyBudget } : {}),
       ...(fields.lifetimeBudget !== undefined ? { lifetime_budget: fields.lifetimeBudget } : {}),
     });
+  }
+
+  async listCustomAudiences(_ctx: MetaConnectorContext, adAccountId: string): Promise<MetaCustomAudienceInfo[]> {
+    const res = await this.transport.callTool("ads_get_ad_account_custom_audiences", { ad_account_id: adAccountId });
+    return arr(res).map((a) => ({
+      audienceId: String(a.id ?? ""),
+      name: a.name ?? "",
+      subtype: (a.subtype ?? "CUSTOM") as MetaCustomAudienceInfo["subtype"],
+      description: a.description,
+      approximateCount: a.approximate_count_upper_bound ?? a.approximate_count,
+    }));
+  }
+
+  async createCustomAudience(
+    _ctx: MetaConnectorContext,
+    adAccountId: string,
+    spec: CreateCustomAudienceSpec,
+  ): Promise<{ id: string }> {
+    const res = (await this.transport.callTool("ads_create_custom_audience", {
+      ad_account_id: adAccountId,
+      name: spec.name,
+      subtype: spec.subtype,
+      ...(spec.description ? { description: spec.description } : {}),
+      ...(spec.subtype === "LOOKALIKE"
+        ? { origin_audience_id: spec.originAudienceId, lookalike_ratio: spec.ratio ?? 0.01 }
+        : {}),
+    })) as any;
+    return { id: String(res?.id ?? res?.audience_id ?? "") };
+  }
+
+  async deleteCustomAudience(_ctx: MetaConnectorContext, audienceId: string): Promise<void> {
+    await this.transport.callTool("ads_delete_custom_audience", { audience_id: audienceId });
   }
 
   async getLead(_ctx: MetaConnectorContext, leadId: string): Promise<MetaLeadInfo> {

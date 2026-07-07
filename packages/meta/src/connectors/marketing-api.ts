@@ -15,6 +15,8 @@ import {
   type MetaEntityType,
   type MetaIgAccountInfo,
   type MetaInsightsQuery,
+  type CreateCustomAudienceSpec,
+  type MetaCustomAudienceInfo,
   type MetaInsightsRow,
   type MetaLeadInfo,
   type MetaPageInfo,
@@ -327,6 +329,71 @@ export class MarketingApiConnector implements MetaConnector {
     if (fields.lifetimeBudget !== undefined) body.lifetime_budget = fields.lifetimeBudget;
     if (Object.keys(body).length === 0) return;
     await this.post(ctx, `/${id}`, body);
+  }
+
+  async listCustomAudiences(ctx: MetaConnectorContext, adAccountId: string): Promise<MetaCustomAudienceInfo[]> {
+    const res = await this.get<{ data: any[] }>(ctx, `/act_${adAccountId}/customaudiences`, {
+      fields: "id,name,subtype,description,approximate_count_lower_bound,approximate_count_upper_bound",
+      limit: "200",
+    });
+    return (res.data ?? []).map((a) => ({
+      audienceId: a.id,
+      name: a.name,
+      subtype: (a.subtype ?? "CUSTOM") as MetaCustomAudienceInfo["subtype"],
+      description: a.description,
+      approximateCount: a.approximate_count_upper_bound ?? a.approximate_count_lower_bound,
+    }));
+  }
+
+  async createCustomAudience(
+    ctx: MetaConnectorContext,
+    adAccountId: string,
+    spec: CreateCustomAudienceSpec,
+  ): Promise<{ id: string }> {
+    const body: Record<string, unknown> = { name: spec.name, subtype: spec.subtype };
+    if (spec.description) body.description = spec.description;
+    if (spec.subtype === "WEBSITE" && spec.pixelId) {
+      body.rule = JSON.stringify({
+        inclusions: {
+          operator: "or",
+          rules: [
+            {
+              event_sources: [{ type: "pixel", id: spec.pixelId }],
+              retention_seconds: (spec.retentionDays ?? 30) * 86400,
+              filter: { operator: "and", filters: [{ field: "url", operator: "i_contains", value: "" }] },
+              template: "ALL_VISITORS",
+            },
+          ],
+        },
+      });
+    } else if (spec.subtype === "ENGAGEMENT" && spec.pageId) {
+      body.rule = JSON.stringify({
+        inclusions: {
+          operator: "or",
+          rules: [
+            {
+              event_sources: [{ type: "page", id: spec.pageId }],
+              retention_seconds: (spec.retentionDays ?? 90) * 86400,
+            },
+          ],
+        },
+      });
+    } else if (spec.subtype === "LOOKALIKE" && spec.originAudienceId) {
+      body.origin_audience_id = spec.originAudienceId;
+      body.lookalike_spec = JSON.stringify({
+        ratio: spec.ratio ?? 0.01,
+        country: spec.country ?? "IL",
+        type: "similarity",
+      });
+    }
+    const res = await this.post<{ id: string }>(ctx, `/act_${adAccountId}/customaudiences`, body);
+    return { id: res.id };
+  }
+
+  async deleteCustomAudience(ctx: MetaConnectorContext, audienceId: string): Promise<void> {
+    await this.raw(`${this.base}/${audienceId}?access_token=${encodeURIComponent(ctx.accessToken)}`, {
+      method: "DELETE",
+    });
   }
 
   async getLead(ctx: MetaConnectorContext, leadId: string): Promise<MetaLeadInfo> {

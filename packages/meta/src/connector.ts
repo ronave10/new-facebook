@@ -3,7 +3,9 @@ import type {
   CreateAdSpec,
   CreateCampaignSpec,
   CreateCreativeSpec,
+  CreateCustomAudienceSpec,
   CreatedEntity,
+  MetaCustomAudienceInfo,
   MetaAdAccountInfo,
   MetaAdInfo,
   MetaAdSetInfo,
@@ -94,4 +96,13 @@ export interface MetaConnector {
 
   /** Fetch a single Lead Ad submission by its lead id (leadgen webhook payload). */
   getLead(ctx: MetaConnectorContext, leadId: string): Promise<MetaLeadInfo>;
+
+  // ── Custom audiences (remarketing / lookalikes) ──
+  listCustomAudiences(ctx: MetaConnectorContext, adAccountId: string): Promise<MetaCustomAudienceInfo[]>;
+  createCustomAudience(
+    ctx: MetaConnectorContext,
+    adAccountId: string,
+    spec: CreateCustomAudienceSpec,
+  ): Promise<{ id: string }>;
+  deleteCustomAudience(ctx: MetaConnectorContext, audienceId: string): Promise<void>;
 }

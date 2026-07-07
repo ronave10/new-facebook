@@ -5,10 +5,12 @@ import { MetaConnectorFactory } from "./connector.factory";
 import { MetaCallLogger } from "./meta-call-logger.service";
 import { SyncService } from "./sync.service";
 import { SchedulerService } from "./scheduler.service";
+import { AudiencesController } from "./audiences.controller";
+import { AudiencesService } from "./audiences.service";
 
 @Module({
-  controllers: [MetaController],
-  providers: [MetaService, MetaConnectorFactory, MetaCallLogger, SyncService, SchedulerService],
+  controllers: [MetaController, AudiencesController],
+  providers: [MetaService, MetaConnectorFactory, MetaCallLogger, SyncService, SchedulerService, AudiencesService],
   exports: [MetaService, MetaConnectorFactory, MetaCallLogger, SyncService],
 })
 export class MetaModule {}

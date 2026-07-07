@@ -178,6 +178,33 @@ export interface MetaLeadInfo {
   fieldData: { name: string; values: string[] }[];
 }
 
+export type CustomAudienceSubtype = "WEBSITE" | "ENGAGEMENT" | "CUSTOM" | "LOOKALIKE";
+
+export interface MetaCustomAudienceInfo {
+  audienceId: string;
+  name: string;
+  subtype: CustomAudienceSubtype;
+  description?: string;
+  approximateCount?: number;
+  originAudienceId?: string;
+  ratio?: number;
+}
+
+export interface CreateCustomAudienceSpec {
+  name: string;
+  subtype: CustomAudienceSubtype;
+  description?: string;
+  /** WEBSITE: pixel id + retention days. */
+  pixelId?: string;
+  retentionDays?: number;
+  /** ENGAGEMENT: page id (page engagers). */
+  pageId?: string;
+  /** LOOKALIKE: origin audience + ratio (0.01–0.20) + country. */
+  originAudienceId?: string;
+  ratio?: number;
+  country?: string;
+}
+
 export type MetaEntityType = "campaign" | "ad_set" | "ad";
 
 /** Structured error every connector must throw. */

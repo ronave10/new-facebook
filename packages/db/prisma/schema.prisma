@@ -305,6 +305,7 @@ model MetaConnection {
   adAccounts   MetaAdAccount[]
   pages        MetaPage[]
   pixels       MetaPixel[]
+  customAudiences MetaCustomAudience[]
 
   @@index([organizationId, clientId])
   @@map("meta_connections")
@@ -368,6 +369,38 @@ model MetaPixel {
   @@unique([connectionId, pixelId])
   @@index([organizationId])
   @@map("meta_pixels")
+}
+
+enum CustomAudienceSubtype {
+  WEBSITE
+  ENGAGEMENT
+  CUSTOM
+  LOOKALIKE
+}
+
+// A Custom or Lookalike audience created/synced from Meta.
+model MetaCustomAudience {
+  id               String                @id @default(cuid())
+  organizationId   String
+  clientId         String?
+  connectionId     String
+  metaAudienceId   String
+  name             String
+  subtype          CustomAudienceSubtype
+  description      String?
+  approximateCount Int?
+  // for lookalikes
+  originAudienceId String?
+  ratio            Float?
+  raw              Json                  @default("{}")
+  createdAt        DateTime              @default(now())
+  updatedAt        DateTime              @updatedAt
+
+  connection MetaConnection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+
+  @@unique([connectionId, metaAudienceId])
+  @@index([organizationId, clientId])
+  @@map("meta_custom_audiences")
 }
 
 // ─────────────────────────────── Campaigns ───────────────────────────────

@@ -10,6 +10,7 @@ import { Button, Card, CardBody, ConfirmDialog, EmptyState, PageHeader, Spinner,
 import { ClientStatusBadge, MetaStatusBadge, CampaignStatusBadge } from "@/components/StatusBadge";
 import { MediaLibrary } from "@/components/clients/MediaLibrary";
 import { LeadsInbox } from "@/components/clients/LeadsInbox";
+import { AudiencesManager } from "@/components/clients/AudiencesManager";
 import { formatNumber } from "@/lib/format";
 
 export default function ClientDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -42,6 +43,7 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
           { key: "personas", label: "פרסונות" },
           { key: "media", label: "מדיה" },
           { key: "leads", label: "לידים" },
+          { key: "audiences", label: "קהלים" },
           { key: "meta", label: "חיבור Meta" },
           { key: "campaigns", label: "קמפיינים" },
         ]}
@@ -52,6 +54,7 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
       {tab === "personas" && <PersonasTab clientId={id} />}
       {tab === "media" && <MediaLibrary clientId={id} />}
       {tab === "leads" && <LeadsInbox clientId={id} />}
+      {tab === "audiences" && <AudiencesManager clientId={id} />}
       {tab === "meta" && <MetaTab clientId={id} />}
       {tab === "campaigns" && <CampaignsTab clientId={id} />}
     </div>

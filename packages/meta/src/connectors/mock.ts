@@ -12,6 +12,8 @@ import type {
   MetaCreativeInfo,
   MetaEntityType,
   MetaIgAccountInfo,
+  CreateCustomAudienceSpec,
+  MetaCustomAudienceInfo,
   MetaInsightsQuery,
   MetaInsightsRow,
   MetaLeadInfo,
@@ -275,6 +277,51 @@ export class MockMetaConnector implements MetaConnector {
     if (!entity) return;
     if (fields.dailyBudget !== undefined) entity.dailyBudget = fields.dailyBudget;
     if (fields.lifetimeBudget !== undefined) entity.lifetimeBudget = fields.lifetimeBudget;
+  }
+
+  private audiences = new Map<string, MockEntity>();
+
+  async listCustomAudiences(): Promise<MetaCustomAudienceInfo[]> {
+    if (this.audiences.size === 0) {
+      // seed one so the UI isn't empty on first load
+      this.audiences.set("mock_aud_seed", {
+        id: "mock_aud_seed",
+        status: "READY",
+        name: "מבקרי אתר 30 יום (דמו)",
+        subtype: "WEBSITE",
+        approximate_count: 4200,
+      });
+    }
+    return [...this.audiences.values()].map((a) => ({
+      audienceId: a.id,
+      name: a.name as string,
+      subtype: a.subtype as MetaCustomAudienceInfo["subtype"],
+      approximateCount: a.approximate_count as number | undefined,
+      originAudienceId: a.origin_audience_id as string | undefined,
+      ratio: a.ratio as number | undefined,
+    }));
+  }
+
+  async createCustomAudience(
+    _ctx: MetaConnectorContext,
+    _acct: string,
+    spec: CreateCustomAudienceSpec,
+  ): Promise<{ id: string }> {
+    const id = this.nextId("aud");
+    this.audiences.set(id, {
+      id,
+      status: "READY",
+      name: spec.name,
+      subtype: spec.subtype,
+      approximate_count: spec.subtype === "LOOKALIKE" ? 200000 : 3500,
+      origin_audience_id: spec.originAudienceId,
+      ratio: spec.ratio,
+    });
+    return { id };
+  }
+
+  async deleteCustomAudience(_ctx: MetaConnectorContext, audienceId: string): Promise<void> {
+    this.audiences.delete(audienceId);
   }
 
   async getLead(_ctx: MetaConnectorContext, leadId: string): Promise<MetaLeadInfo> {

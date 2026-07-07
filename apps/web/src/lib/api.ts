@@ -164,6 +164,13 @@ export const api = {
     post<any>(`/recommendations/${id}/decide`, { decision }),
   applyRecommendation: (id: string) => post<any>(`/recommendations/${id}/apply`),
 
+  // custom audiences
+  audiences: (clientId: string) => get<any[]>(`/clients/${clientId}/audiences`),
+  syncAudiences: (clientId: string) => post<any[]>(`/clients/${clientId}/audiences/sync`),
+  createAudience: (clientId: string, b: { name: string; subtype: string; originAudienceId?: string; ratio?: number }) =>
+    post<any>(`/clients/${clientId}/audiences`, b),
+  deleteAudience: (id: string) => del<any>(`/audiences/${id}`),
+
   // leads
   leads: (clientId: string, status?: string) =>
     get<any[]>(`/clients/${clientId}/leads${status ? `?status=${status}` : ""}`),

@@ -51,6 +51,26 @@ describe("MockMetaConnector", () => {
     expect(a.length).toBe(7);
     expect(a[0].spend).toBeGreaterThan(0);
   });
+
+  it("creates, lists and deletes custom audiences", async () => {
+    const c: MetaConnector = new MockMetaConnector();
+    const seeded = await c.listCustomAudiences(ctx, "1");
+    expect(seeded.length).toBeGreaterThanOrEqual(1);
+    const created = await c.createCustomAudience(ctx, "1", { name: "LAL", subtype: "LOOKALIKE", ratio: 0.01 });
+    expect(created.id).toContain("mock_aud");
+    const after = await c.listCustomAudiences(ctx, "1");
+    expect(after.find((a) => a.audienceId === created.id)?.subtype).toBe("LOOKALIKE");
+    await c.deleteCustomAudience(ctx, created.id);
+    const final = await c.listCustomAudiences(ctx, "1");
+    expect(final.find((a) => a.audienceId === created.id)).toBeUndefined();
+  });
+
+  it("returns a lead with normalized field data", async () => {
+    const c: MetaConnector = new MockMetaConnector();
+    const lead = await c.getLead(ctx, "lead_123");
+    expect(lead.leadId).toBe("lead_123");
+    expect(lead.fieldData.some((f) => f.name === "email")).toBe(true);
+  });
 });
 
 describe("mapGraphError", () => {
