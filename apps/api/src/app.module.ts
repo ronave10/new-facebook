@@ -9,6 +9,7 @@ import { MetaModule } from "./meta/meta.module";
 import { CampaignsModule } from "./campaigns/campaigns.module";
 import { AnalyticsModule } from "./analytics/analytics.module";
 import { StorageModule } from "./storage/storage.module";
+import { LeadsModule } from "./leads/leads.module";
 
 @Module({
   imports: [
@@ -21,6 +22,7 @@ import { StorageModule } from "./storage/storage.module";
     CampaignsModule,
     AnalyticsModule,
     StorageModule,
+    LeadsModule,
   ],
   controllers: [HealthController],
 })

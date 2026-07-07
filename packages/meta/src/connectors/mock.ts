@@ -14,6 +14,7 @@ import type {
   MetaIgAccountInfo,
   MetaInsightsQuery,
   MetaInsightsRow,
+  MetaLeadInfo,
   MetaPageInfo,
   MetaPixelInfo,
 } from "../types";
@@ -274,6 +275,23 @@ export class MockMetaConnector implements MetaConnector {
     if (!entity) return;
     if (fields.dailyBudget !== undefined) entity.dailyBudget = fields.dailyBudget;
     if (fields.lifetimeBudget !== undefined) entity.lifetimeBudget = fields.lifetimeBudget;
+  }
+
+  async getLead(_ctx: MetaConnectorContext, leadId: string): Promise<MetaLeadInfo> {
+    const r = seed01(leadId);
+    const first = ["דנה", "אבי", "נועה", "יוסי", "מיכל"][Math.floor(r * 5)];
+    return {
+      leadId,
+      formId: "mock_form_1",
+      adId: "mock_ad_1",
+      campaignId: "mock_campaign_1",
+      createdTime: isoDaysAgo(0),
+      fieldData: [
+        { name: "full_name", values: [`${first} ישראלי`] },
+        { name: "email", values: [`${first.toLowerCase()}${Math.floor(r * 1000)}@example.co.il`] },
+        { name: "phone_number", values: [`05${Math.floor(r * 90000000 + 10000000)}`] },
+      ],
+    };
   }
 
   private store(type: MetaEntityType): Map<string, MockEntity> {

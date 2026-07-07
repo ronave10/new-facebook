@@ -16,6 +16,7 @@ import {
   type MetaIgAccountInfo,
   type MetaInsightsQuery,
   type MetaInsightsRow,
+  type MetaLeadInfo,
   type MetaPageInfo,
   type MetaPixelInfo,
 } from "../types";
@@ -326,6 +327,20 @@ export class MarketingApiConnector implements MetaConnector {
     if (fields.lifetimeBudget !== undefined) body.lifetime_budget = fields.lifetimeBudget;
     if (Object.keys(body).length === 0) return;
     await this.post(ctx, `/${id}`, body);
+  }
+
+  async getLead(ctx: MetaConnectorContext, leadId: string): Promise<MetaLeadInfo> {
+    const data = await this.get<any>(ctx, `/${leadId}`, {
+      fields: "id,form_id,ad_id,campaign_id,created_time,field_data",
+    });
+    return {
+      leadId: data.id,
+      formId: data.form_id,
+      adId: data.ad_id,
+      campaignId: data.campaign_id,
+      createdTime: data.created_time,
+      fieldData: (data.field_data ?? []).map((f: any) => ({ name: f.name, values: f.values ?? [] })),
+    };
   }
 
   // ── internals ──

@@ -154,6 +154,7 @@ model Client {
   agentRuns       AgentRun[]
   metaConnections MetaConnection[]
   metaAdAccounts  MetaAdAccount[]
+  leads           Lead[]
 
   @@index([organizationId])
   @@map("clients")
@@ -613,6 +614,42 @@ model GeneratedCopyVariant {
 
   @@index([organizationId, clientId, kind])
   @@map("generated_copy_variants")
+}
+
+// ─────────────────────────────── Lead Ads ───────────────────────────────
+
+enum LeadStatus {
+  NEW
+  CONTACTED
+  QUALIFIED
+  DISQUALIFIED
+  CONVERTED
+}
+
+// A lead received from a Meta Lead Ad form (via the leadgen webhook).
+model Lead {
+  id             String     @id @default(cuid())
+  organizationId String
+  clientId       String
+  campaignId     String?
+  adId           String?
+  formId         String?
+  metaLeadId     String     @unique
+  fullName       String?
+  email          String?
+  phone          String?
+  // full field_data payload from Meta (arbitrary form fields)
+  fieldData      Json       @default("{}")
+  status         LeadStatus @default(NEW)
+  notes          String?
+  metaCreatedAt  DateTime?
+  receivedAt     DateTime   @default(now())
+  decidedById    String?
+
+  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, clientId, status])
+  @@map("leads")
 }
 
 // ─────────────────────────────── Approvals & Safety ───────────────────────────────

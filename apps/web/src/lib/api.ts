@@ -164,6 +164,13 @@ export const api = {
     post<any>(`/recommendations/${id}/decide`, { decision }),
   applyRecommendation: (id: string) => post<any>(`/recommendations/${id}/apply`),
 
+  // leads
+  leads: (clientId: string, status?: string) =>
+    get<any[]>(`/clients/${clientId}/leads${status ? `?status=${status}` : ""}`),
+  simulateLead: (clientId: string) => post<any>(`/clients/${clientId}/leads/simulate`),
+  updateLeadStatus: (leadId: string, status: string, notes?: string) =>
+    put<any>(`/leads/${leadId}/status`, { status, notes }),
+
   // creative assets
   assets: (clientId: string) => get<any[]>(`/clients/${clientId}/assets`),
   uploadAsset: (clientId: string, b: { fileName: string; mimeType: string; kind: "IMAGE" | "VIDEO"; dataBase64: string }) =>

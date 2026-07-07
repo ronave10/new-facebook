@@ -168,6 +168,16 @@ export interface CreatedEntity {
   status: "PAUSED"; // connectors MUST always create entities paused
 }
 
+export interface MetaLeadInfo {
+  leadId: string;
+  formId?: string;
+  adId?: string;
+  campaignId?: string;
+  createdTime?: string;
+  /** Raw field_data from the Lead Ad form: [{ name, values }]. */
+  fieldData: { name: string; values: string[] }[];
+}
+
 export type MetaEntityType = "campaign" | "ad_set" | "ad";
 
 /** Structured error every connector must throw. */

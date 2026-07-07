@@ -13,6 +13,7 @@ import type {
   MetaIgAccountInfo,
   MetaInsightsQuery,
   MetaInsightsRow,
+  MetaLeadInfo,
   MetaPageInfo,
   MetaPixelInfo,
 } from "./types";
@@ -90,4 +91,7 @@ export interface MetaConnector {
     entityId: string,
     fields: { dailyBudget?: number; lifetimeBudget?: number },
   ): Promise<void>;
+
+  /** Fetch a single Lead Ad submission by its lead id (leadgen webhook payload). */
+  getLead(ctx: MetaConnectorContext, leadId: string): Promise<MetaLeadInfo>;
 }

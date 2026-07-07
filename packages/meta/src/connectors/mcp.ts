@@ -14,6 +14,7 @@ import type {
   MetaIgAccountInfo,
   MetaInsightsQuery,
   MetaInsightsRow,
+  MetaLeadInfo,
   MetaPageInfo,
   MetaPixelInfo,
 } from "../types";
@@ -246,5 +247,17 @@ export class McpMetaConnector implements MetaConnector {
       ...(fields.dailyBudget !== undefined ? { daily_budget: fields.dailyBudget } : {}),
       ...(fields.lifetimeBudget !== undefined ? { lifetime_budget: fields.lifetimeBudget } : {}),
     });
+  }
+
+  async getLead(_ctx: MetaConnectorContext, leadId: string): Promise<MetaLeadInfo> {
+    const res = (await this.transport.callTool("ads_get_lead", { lead_id: leadId })) as any;
+    return {
+      leadId: String(res?.id ?? leadId),
+      formId: res?.form_id,
+      adId: res?.ad_id,
+      campaignId: res?.campaign_id,
+      createdTime: res?.created_time,
+      fieldData: (res?.field_data ?? []).map((f: any) => ({ name: f.name, values: f.values ?? [] })),
+    };
   }
 }

@@ -9,6 +9,7 @@ import { useToast } from "@/components/ui/Toast";
 import { Button, Card, CardBody, ConfirmDialog, EmptyState, PageHeader, Spinner, Tabs } from "@/components/ui";
 import { ClientStatusBadge, MetaStatusBadge, CampaignStatusBadge } from "@/components/StatusBadge";
 import { MediaLibrary } from "@/components/clients/MediaLibrary";
+import { LeadsInbox } from "@/components/clients/LeadsInbox";
 import { formatNumber } from "@/lib/format";
 
 export default function ClientDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -40,6 +41,7 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
           { key: "brand", label: "פרופיל מותג" },
           { key: "personas", label: "פרסונות" },
           { key: "media", label: "מדיה" },
+          { key: "leads", label: "לידים" },
           { key: "meta", label: "חיבור Meta" },
           { key: "campaigns", label: "קמפיינים" },
         ]}
@@ -49,6 +51,7 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
       {tab === "brand" && <BrandTab client={client} onSaved={reload} />}
       {tab === "personas" && <PersonasTab clientId={id} />}
       {tab === "media" && <MediaLibrary clientId={id} />}
+      {tab === "leads" && <LeadsInbox clientId={id} />}
       {tab === "meta" && <MetaTab clientId={id} />}
       {tab === "campaigns" && <CampaignsTab clientId={id} />}
     </div>

@@ -28,6 +28,7 @@ const envSchema = z.object({
     .string()
     .default("http://localhost:4000/api/v1/meta/connect/callback"),
   META_OAUTH_SCOPES: z.string().default("ads_read,business_management,pages_show_list"),
+  META_WEBHOOK_VERIFY_TOKEN: z.string().optional().default("campaignos-verify"),
 
   AI_PROVIDER: z.enum(["anthropic", "mock"]).default("mock"),
   ANTHROPIC_API_KEY: z.string().optional().default(""),
