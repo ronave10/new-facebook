@@ -167,20 +167,27 @@ export class RecommendationsService {
         agentRunId: runId,
       }));
 
-    const created = await this.prisma.$transaction(
-      [...deterministicRows, ...aiRows].map((row) =>
+    const created = await this.prisma.$transaction([
+      // Supersede prior open recommendations so the list reflects the latest analysis.
+      this.prisma.optimizationRecommendation.updateMany({
+        where: { organizationId: user.organizationId, clientId, status: "NEW" },
+        data: { status: "DISMISSED" },
+      }),
+      ...[...deterministicRows, ...aiRows].map((row) =>
         this.prisma.optimizationRecommendation.create({ data: row }),
       ),
-    );
+    ]);
+    // First element is the updateMany batch result; the rest are the new rows.
+    const [, ...recs] = created;
     await this.audit.log({
       organizationId: user.organizationId,
       actorId: user.userId,
       action: "recommendation.generate",
       entityType: "client",
       entityId: clientId,
-      metadata: { count: created.length, runId },
+      metadata: { count: recs.length, runId },
     });
-    return created;
+    return recs;
   }
 
   /**
