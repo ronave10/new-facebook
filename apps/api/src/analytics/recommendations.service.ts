@@ -9,16 +9,21 @@ import {
 } from "@campaignos/marketing-core";
 import { AppException } from "../core/api-error";
 import { AuditService } from "../core/audit.service";
+import { CryptoService } from "../core/crypto.service";
 import { PrismaService } from "../core/prisma.service";
 import { AuthContext } from "../core/auth-context";
 import { AgentEngine } from "../agents/agent-engine.service";
 import { AGENT_SYSTEM, buildOptimizationPrompt } from "../agents/prompts";
+
+/** Budget step per recommendation type (matches marketing-core S1/S2 guidance). */
+const BUDGET_STEP: Record<string, number> = { SCALE_BUDGET: 0.2, REDUCE_BUDGET: -0.2 };
 
 @Injectable()
 export class RecommendationsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
+    private readonly crypto: CryptoService,
     private readonly engine: AgentEngine,
   ) {}
 
@@ -176,6 +181,78 @@ export class RecommendationsService {
       metadata: { count: created.length, runId },
     });
     return created;
+  }
+
+  /**
+   * Applies a budget recommendation by creating a BUDGET_CHANGE approval with the
+   * EXACT budget change — nothing hits Meta until a checker approves it. This is
+   * the same safety gate as campaign publishing, reused for optimization actions.
+   */
+  async apply(user: AuthContext, recommendationId: string) {
+    const rec = await this.prisma.optimizationRecommendation.findFirst({
+      where: { id: recommendationId, organizationId: user.organizationId },
+    });
+    if (!rec) throw AppException.notFound("ההמלצה לא נמצאה");
+    if (rec.status !== "NEW") {
+      throw AppException.conflict("ההמלצה כבר טופלה", "ALREADY_HANDLED");
+    }
+    const step = BUDGET_STEP[rec.type];
+    if (step === undefined) {
+      throw AppException.badRequest("ניתן להחיל אוטומטית רק המלצות תקציב", "NOT_APPLICABLE");
+    }
+    if (!rec.campaignId) throw AppException.badRequest("להמלצה אין קמפיין משויך", "NO_CAMPAIGN");
+
+    const campaign = await this.prisma.campaign.findFirst({
+      where: { id: rec.campaignId, organizationId: user.organizationId },
+    });
+    if (!campaign || !campaign.metaCampaignId) {
+      throw AppException.badRequest("הקמפיין אינו מפורסם ב-Meta", "NOT_PUBLISHED");
+    }
+    if (!campaign.budgetAmount) throw AppException.badRequest("לקמפיין אין תקציב מוגדר", "NO_BUDGET");
+
+    const currentBudget = campaign.budgetAmount;
+    const newBudget = Math.round(currentBudget * (1 + step));
+    const payloadPreview = {
+      action: step > 0 ? "BUDGET_INCREASE" : "BUDGET_DECREASE",
+      campaignId: campaign.id,
+      metaCampaignId: campaign.metaCampaignId,
+      budgetType: campaign.budgetType,
+      currentBudget,
+      newBudget,
+      changePct: Math.round(step * 100),
+      currency: campaign.currency,
+    };
+
+    const approval = await this.prisma.$transaction(async (tx) => {
+      const created = await tx.approval.create({
+        data: {
+          organizationId: user.organizationId,
+          entityType: "BUDGET_CHANGE",
+          entityId: campaign.id,
+          action: step > 0 ? "BUDGET_INCREASE" : "BUDGET_DECREASE",
+          payloadPreview: payloadPreview as object,
+          payloadHash: this.crypto.hashJson(payloadPreview),
+          status: "PENDING",
+          requestedById: user.userId,
+          expiresAt: new Date(Date.now() + 72 * 3600 * 1000),
+        },
+      });
+      await tx.optimizationRecommendation.update({
+        where: { id: recommendationId },
+        data: { status: "ACKNOWLEDGED", decidedById: user.userId, decidedAt: new Date() },
+      });
+      return created;
+    });
+
+    await this.audit.log({
+      organizationId: user.organizationId,
+      actorId: user.userId,
+      action: "recommendation.apply",
+      entityType: "recommendation",
+      entityId: recommendationId,
+      metadata: { approvalId: approval.id, currentBudget, newBudget },
+    });
+    return approval;
   }
 
   async list(user: AuthContext, clientId?: string, status?: string) {

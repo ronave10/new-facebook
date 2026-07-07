@@ -263,6 +263,19 @@ export class MockMetaConnector implements MetaConnector {
     this.store(type).get(id) && (this.store(type).get(id)!.status = "PAUSED");
   }
 
+  async updateEntity(
+    _ctx: MetaConnectorContext,
+    _acct: string,
+    type: MetaEntityType,
+    id: string,
+    fields: { dailyBudget?: number; lifetimeBudget?: number },
+  ): Promise<void> {
+    const entity = this.store(type).get(id);
+    if (!entity) return;
+    if (fields.dailyBudget !== undefined) entity.dailyBudget = fields.dailyBudget;
+    if (fields.lifetimeBudget !== undefined) entity.lifetimeBudget = fields.lifetimeBudget;
+  }
+
   private store(type: MetaEntityType): Map<string, MockEntity> {
     return type === "campaign" ? this.campaigns : type === "ad_set" ? this.adSets : this.ads;
   }

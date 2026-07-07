@@ -10,7 +10,11 @@ import { ClientStatusBadge } from "@/components/StatusBadge";
 export default function DashboardPage() {
   const { data: clients, loading } = useApi(() => api.clients(1), []);
   const items = clients?.items ?? [];
-  const firstClientId = items[0]?.id;
+  // Prefer a client that actually has data to summarize on the dashboard.
+  const firstClientId =
+    items.find((c: any) => c.metaConnected && c.campaignCount > 0)?.id ??
+    items.find((c: any) => c.campaignCount > 0)?.id ??
+    items[0]?.id;
   const { data: overview } = useApi(
     () => (firstClientId ? api.analytics(firstClientId) : Promise.resolve(null)),
     [firstClientId],

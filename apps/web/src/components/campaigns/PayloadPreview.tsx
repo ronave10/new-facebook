@@ -14,8 +14,32 @@ const ACTION_LABELS: Record<string, string> = {
  * Renders the exact ordered list of Meta API calls that publish will make.
  * This is the safety contract: the user sees precisely what will be sent.
  */
-export function PayloadPreview({ steps }: { steps: any[] }) {
+export function PayloadPreview({ steps }: { steps: any }) {
   const [openAll, setOpenAll] = useState(false);
+
+  // Budget-change approvals carry an object preview, not a step array.
+  if (steps && !Array.isArray(steps) && steps.metaCampaignId) {
+    const inc = steps.changePct >= 0;
+    return (
+      <div className="rounded-xl border border-slate-200 p-4 text-sm">
+        <div className="mb-2 font-medium text-slate-800">
+          {inc ? "הגדלת תקציב" : "הקטנת תקציב"} ב-{Math.abs(steps.changePct)}%
+        </div>
+        <div className="flex items-center gap-3 text-slate-600">
+          <span className="tabular">₪{(steps.currentBudget / 100).toLocaleString("he-IL")}</span>
+          <span className="text-slate-400">←</span>
+          <span className={`tabular font-semibold ${inc ? "text-green-600" : "text-amber-600"}`}>
+            ₪{(steps.newBudget / 100).toLocaleString("he-IL")}
+          </span>
+          <span className="text-xs text-slate-400">({steps.budgetType === "DAILY" ? "יומי" : "כולל"})</span>
+        </div>
+        <pre dir="ltr" className="mt-3 overflow-x-auto rounded-lg bg-slate-900 p-3 text-xs text-slate-100">
+          {JSON.stringify(steps, null, 2)}
+        </pre>
+      </div>
+    );
+  }
+
   if (!Array.isArray(steps) || steps.length === 0) {
     return <div className="text-sm text-slate-500">אין תוכן לתצוגה מקדימה.</div>;
   }

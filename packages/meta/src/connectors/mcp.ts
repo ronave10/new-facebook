@@ -232,4 +232,19 @@ export class McpMetaConnector implements MetaConnector {
       status: "PAUSED",
     });
   }
+
+  async updateEntity(
+    _ctx: MetaConnectorContext,
+    adAccountId: string,
+    _type: MetaEntityType,
+    id: string,
+    fields: { dailyBudget?: number; lifetimeBudget?: number },
+  ): Promise<void> {
+    await this.transport.callTool("ads_update_entity", {
+      ad_account_id: adAccountId,
+      entity_id: id,
+      ...(fields.dailyBudget !== undefined ? { daily_budget: fields.dailyBudget } : {}),
+      ...(fields.lifetimeBudget !== undefined ? { lifetime_budget: fields.lifetimeBudget } : {}),
+    });
+  }
 }

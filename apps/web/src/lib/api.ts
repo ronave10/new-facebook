@@ -162,6 +162,7 @@ export const api = {
   generateRecommendations: (clientId: string) => post<any[]>("/recommendations/generate", { clientId }),
   decideRecommendation: (id: string, decision: string) =>
     post<any>(`/recommendations/${id}/decide`, { decision }),
+  applyRecommendation: (id: string) => post<any>(`/recommendations/${id}/apply`),
 
   // creative assets
   assets: (clientId: string) => get<any[]>(`/clients/${clientId}/assets`),

@@ -1,19 +1,25 @@
-import { Injectable } from "@nestjs/common";
+import { Injectable, Logger } from "@nestjs/common";
 import { AppException } from "../core/api-error";
 import { AuditService } from "../core/audit.service";
 import { CryptoService } from "../core/crypto.service";
 import { PrismaService } from "../core/prisma.service";
 import { AuthContext } from "../core/auth-context";
+import { MetaService } from "../meta/meta.service";
+import { MetaCallLogger } from "../meta/meta-call-logger.service";
 import { CampaignsService } from "./campaigns.service";
 import { buildPublishPlan, type CampaignBundle } from "./payload-builder";
 
 @Injectable()
 export class ApprovalsService {
+  private readonly logger = new Logger(ApprovalsService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly crypto: CryptoService,
     private readonly audit: AuditService,
     private readonly campaigns: CampaignsService,
+    private readonly meta: MetaService,
+    private readonly callLogger: MetaCallLogger,
   ) {}
 
   /** Assembles the publish bundle for a campaign from local draft data. */
@@ -176,6 +182,12 @@ export class ApprovalsService {
       }
     }
 
+    // Budget-change approvals execute immediately on approval (and are consumed),
+    // instead of moving a campaign into the publish workflow.
+    if (approval.entityType === "BUDGET_CHANGE") {
+      return this.decideBudgetChange(user, approval, approve, reason);
+    }
+
     const updated = await this.prisma.approval.update({
       where: { id: approvalId },
       data: {
@@ -203,6 +215,80 @@ export class ApprovalsService {
       entityType: "campaign",
       entityId: approval.entityId,
       metadata: { approvalId, reason },
+    });
+    return updated;
+  }
+
+  /** Executes an approved budget change against Meta, then consumes the approval. */
+  private async decideBudgetChange(
+    user: AuthContext,
+    approval: { id: string; entityId: string; payloadPreview: unknown; payloadHash: string },
+    approve: boolean,
+    reason?: string,
+  ) {
+    if (!approve) {
+      return this.prisma.approval.update({
+        where: { id: approval.id },
+        data: { status: "REJECTED", decidedById: user.userId, decidedAt: new Date(), reason },
+      });
+    }
+
+    const preview = approval.payloadPreview as {
+      metaCampaignId: string;
+      newBudget: number;
+      budgetType: string;
+      currentBudget: number;
+    };
+    const campaign = await this.prisma.campaign.findFirst({
+      where: { id: approval.entityId, organizationId: user.organizationId },
+    });
+    if (!campaign || !campaign.metaCampaignId) {
+      throw AppException.conflict("הקמפיין אינו מפורסם עוד ב-Meta", "NOT_PUBLISHED");
+    }
+    // Guard against drift: the campaign budget must still be what we approved against.
+    if (campaign.budgetAmount !== preview.currentBudget) {
+      throw AppException.conflict("תקציב הקמפיין השתנה מאז הבקשה. יש לבקש שוב.", "BUDGET_STALE");
+    }
+
+    const account = await this.prisma.metaAdAccount.findFirst({
+      where: { organizationId: user.organizationId, clientId: campaign.clientId, isSelected: true },
+    });
+    if (!account) throw AppException.badRequest("לא נבחר חשבון מודעות", "NO_AD_ACCOUNT");
+
+    const ctx = await this.meta.context(user.organizationId, account.connectionId);
+    const fields =
+      preview.budgetType === "LIFETIME" ? { lifetimeBudget: preview.newBudget } : { dailyBudget: preview.newBudget };
+    await this.callLogger.wrap(
+      {
+        organizationId: user.organizationId,
+        connectionId: account.connectionId,
+        operation: "updateEntity",
+        isWrite: true,
+        approvalId: approval.id,
+        requestInfo: fields,
+      },
+      () => this.meta.connector().updateEntity(ctx, account.accountId, "campaign", campaign.metaCampaignId!, fields),
+    );
+
+    const [updated] = await this.prisma.$transaction([
+      this.prisma.approval.update({
+        where: { id: approval.id },
+        data: { status: "CONSUMED", decidedById: user.userId, decidedAt: new Date(), consumedAt: new Date(), reason },
+      }),
+      this.prisma.campaign.update({
+        where: { id: campaign.id },
+        data: { budgetAmount: preview.newBudget },
+      }),
+    ]);
+    await this.audit.log({
+      organizationId: user.organizationId,
+      actorId: user.userId,
+      action: "campaign.budget.change",
+      entityType: "campaign",
+      entityId: campaign.id,
+      before: { budget: preview.currentBudget },
+      after: { budget: preview.newBudget },
+      metadata: { approvalId: approval.id },
     });
     return updated;
   }

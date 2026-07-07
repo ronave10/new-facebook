@@ -314,6 +314,20 @@ export class MarketingApiConnector implements MetaConnector {
     await this.post(ctx, `/${id}`, { status: "PAUSED" });
   }
 
+  async updateEntity(
+    ctx: MetaConnectorContext,
+    _acct: string,
+    _type: MetaEntityType,
+    id: string,
+    fields: { dailyBudget?: number; lifetimeBudget?: number },
+  ): Promise<void> {
+    const body: Record<string, unknown> = {};
+    if (fields.dailyBudget !== undefined) body.daily_budget = fields.dailyBudget;
+    if (fields.lifetimeBudget !== undefined) body.lifetime_budget = fields.lifetimeBudget;
+    if (Object.keys(body).length === 0) return;
+    await this.post(ctx, `/${id}`, body);
+  }
+
   // ── internals ──
 
   private buildTargeting(spec: CreateAdSetSpec): Record<string, unknown> {

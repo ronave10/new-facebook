@@ -64,4 +64,12 @@ export class AnalyticsController {
   ) {
     return this.recommendations.decide(user, id, body.decision);
   }
+
+  // Applying a budget recommendation creates an approval — nothing changes on
+  // Meta until a checker approves it (same safety gate as publishing).
+  @Post("recommendations/:id/apply")
+  @RequirePermission("recommendation.decide")
+  apply(@CurrentUser() user: AuthContext, @Param("id") id: string) {
+    return this.recommendations.apply(user, id);
+  }
 }

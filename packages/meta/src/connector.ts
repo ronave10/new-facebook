@@ -81,4 +81,13 @@ export interface MetaConnector {
     entityType: MetaEntityType,
     entityId: string,
   ): Promise<void>;
+
+  /** Update mutable fields (e.g. daily/lifetime budget in minor units) on a live entity. */
+  updateEntity(
+    ctx: MetaConnectorContext,
+    adAccountId: string,
+    entityType: MetaEntityType,
+    entityId: string,
+    fields: { dailyBudget?: number; lifetimeBudget?: number },
+  ): Promise<void>;
 }

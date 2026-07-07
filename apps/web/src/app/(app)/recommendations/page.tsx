@@ -50,6 +50,16 @@ function RecommendationsInner() {
     }
   }
 
+  async function applyRec(id: string) {
+    try {
+      await api.applyRecommendation(id);
+      toast("נשלחה בקשת אישור לשינוי התקציב", "success");
+      reload();
+    } catch (err) {
+      toast(err instanceof ApiError ? err.message : "פעולה נכשלה", "error");
+    }
+  }
+
   const recs = (data ?? []).slice().sort((a: any, b: any) => sev(b.severity) - sev(a.severity));
 
   return (
@@ -94,6 +104,9 @@ function RecommendationsInner() {
                   </div>
                   {r.status === "NEW" && (
                     <div className="flex shrink-0 gap-1.5">
+                      {(r.type === "SCALE_BUDGET" || r.type === "REDUCE_BUDGET") && (
+                        <Button onClick={() => applyRec(r.id)}>החל (דורש אישור)</Button>
+                      )}
                       <Button variant="secondary" onClick={() => decide(r.id, "APPLIED")}>
                         בוצע
                       </Button>
