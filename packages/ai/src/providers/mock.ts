@@ -3,6 +3,7 @@ import { fillSchema } from "../schema-filler";
 import {
   ADS_FIXTURE,
   ANALYTICS_FIXTURE,
+  BRAND_EXTRACT_FIXTURE,
   COMPLIANCE_FIXTURE,
   OPTIMIZATION_FIXTURE,
   PERSONA_FIXTURE,
@@ -33,6 +34,8 @@ export class MockAiProvider implements AiProvider {
         return OPTIMIZATION_FIXTURE;
       case "research.analyze":
         return RESEARCH_FIXTURE;
+      case "brand.extract":
+        return BRAND_EXTRACT_FIXTURE;
       case "analytics.summarize":
         return ANALYTICS_FIXTURE;
       default:

@@ -33,6 +33,27 @@ describe("MockAiProvider", () => {
     expect(res.model).toBe("mock-ai-v1");
   });
 
+  it("returns a schema-valid brand DNA extraction", async () => {
+    const brandExtractSchema = z.object({
+      suggestedIndustry: z.string(),
+      mainProduct: z.string(),
+      keyBenefits: z.array(z.string()),
+      differentiation: z.string(),
+      customerPains: z.array(z.string()),
+      commonObjections: z.array(z.string()),
+      brandTone: z.string(),
+    });
+    const res = await provider.complete({
+      taskKey: "brand.extract",
+      system: "s",
+      prompt: "p",
+      schema: brandExtractSchema,
+    });
+    expect(res.data.keyBenefits.length).toBeGreaterThan(0);
+    expect(res.data.mainProduct).toBeTruthy();
+    expect(brandExtractSchema.safeParse(res.data).success).toBe(true);
+  });
+
   it("falls back to schema filler for unknown taskKey", async () => {
     const schema = z.object({ foo: z.string(), bar: z.number(), items: z.array(z.string()) });
     const res = await provider.complete({ taskKey: "unknown.task", system: "s", prompt: "p", schema });

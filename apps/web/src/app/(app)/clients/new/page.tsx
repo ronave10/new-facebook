@@ -14,6 +14,7 @@ export default function NewClientWizard() {
   const { toast } = useToast();
   const [step, setStep] = useState(0);
   const [saving, setSaving] = useState(false);
+  const [extracting, setExtracting] = useState(false);
 
   const [form, setForm] = useState({
     name: "",
@@ -36,6 +37,33 @@ export default function NewClientWizard() {
     regulatoryNotes: "",
   });
   const set = (k: string, v: any) => setForm((f) => ({ ...f, [k]: v }));
+
+  async function magicFill() {
+    const url = form.website.trim();
+    if (!url) {
+      toast("יש להזין כתובת אתר תחילה", "error");
+      return;
+    }
+    setExtracting(true);
+    try {
+      const dna = await api.extractBrand(url);
+      setForm((f) => ({
+        ...f,
+        industry: f.industry || dna.suggestedIndustry || "",
+        mainProduct: dna.mainProduct || f.mainProduct,
+        keyBenefits: dna.keyBenefits?.length ? dna.keyBenefits : f.keyBenefits,
+        differentiation: dna.differentiation || f.differentiation,
+        customerPains: dna.customerPains?.length ? dna.customerPains : f.customerPains,
+        commonObjections: dna.commonObjections?.length ? dna.commonObjections : f.commonObjections,
+        brandTone: dna.brandTone || f.brandTone,
+      }));
+      toast("הפרופיל מולא אוטומטית מהאתר — עברו ואשרו את הפרטים ✨", "success");
+    } catch (err) {
+      toast(err instanceof ApiError ? err.message : "מילוי אוטומטי נכשל", "error");
+    } finally {
+      setExtracting(false);
+    }
+  }
 
   async function submit() {
     setSaving(true);
@@ -96,7 +124,13 @@ export default function NewClientWizard() {
               </div>
               <div>
                 <Label>אתר</Label>
-                <Input dir="ltr" value={form.website} onChange={(e) => set("website", e.target.value)} placeholder="https://" />
+                <div className="flex gap-2">
+                  <Input dir="ltr" className="flex-1" value={form.website} onChange={(e) => set("website", e.target.value)} placeholder="https://" />
+                  <Button type="button" variant="secondary" onClick={magicFill} loading={extracting} disabled={!form.website.trim()}>
+                    ✨ מילוי אוטומטי
+                  </Button>
+                </div>
+                <p className="mt-1 text-xs text-slate-400">הדבק כתובת אתר וה-AI ימלא את פרופיל המותג אוטומטית</p>
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>

@@ -136,6 +136,26 @@ export const researchSchema = z.object({
 });
 export type ResearchSchema = z.infer<typeof researchSchema>;
 
+// ─────────────────────────── Brand DNA extraction (Magic Fill) ───────────────────────────
+
+/** Request: a public website URL to mine for the brand profile. */
+export const brandExtractRequestSchema = z.object({
+  url: z.string().url("כתובת אתר לא תקינה"),
+});
+export type BrandExtractRequest = z.infer<typeof brandExtractRequestSchema>;
+
+/** Agent output: a partial brand profile inferred from the website text. */
+export const brandExtractSchema = z.object({
+  suggestedIndustry: z.string().optional().default(""),
+  mainProduct: z.string().optional().default(""),
+  keyBenefits: z.array(z.string()).default([]),
+  differentiation: z.string().optional().default(""),
+  customerPains: z.array(z.string()).default([]),
+  commonObjections: z.array(z.string()).default([]),
+  brandTone: z.string().optional().default(""),
+});
+export type BrandExtractSchema = z.infer<typeof brandExtractSchema>;
+
 // ─────────────────────────── Strategy (agent output) ───────────────────────────
 
 export const strategySchema = z.object({

@@ -1,5 +1,6 @@
 import { Body, Controller, Delete, Get, Param, Post, Put, Query } from "@nestjs/common";
 import {
+  brandExtractRequestSchema,
   brandProfileSchema,
   createClientSchema,
   createCompetitorSchema,
@@ -95,6 +96,16 @@ export class ClientsController {
   @RequirePermission("persona.write")
   deletePersona(@CurrentUser() user: AuthContext, @Param("id") id: string) {
     return this.personas.remove(user, id);
+  }
+
+  // ── Brand DNA extraction (Magic Fill from website) ──
+  @Post("clients/extract-brand")
+  @RequirePermission("client.write")
+  extractBrand(
+    @CurrentUser() user: AuthContext,
+    @Body(new ZodValidationPipe(brandExtractRequestSchema)) body: { url: string },
+  ) {
+    return this.research.extractBrandFromWebsite(user, body.url);
   }
 
   // ── Competitor research (Ad Library intelligence) ──

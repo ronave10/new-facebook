@@ -79,6 +79,11 @@ export function buildResearchPrompt(
   return `נתח את השוק והמתחרים עבור העסק הבא, על בסיס מודעות אמיתיות שנאספו מ-Meta Ad Library.\n\n${brandBlock(b)}\n\nמודעות מתחרים שנמצאו:\n${adsBlock}\n\nהחזר JSON עם: marketSummary (סיכום שוק קצר), competitorInsights (מערך תובנות — אילו זוויות/הבטחות המתחרים משתמשים בהן), opportunities (מערך הזדמנויות — פערים שהעסק יכול לנצל, זוויות שאיש לא תופס), recommendedAngles (מערך זוויות מומלצות לבידול). היה חד וספציפי לשוק הישראלי.`;
 }
 
+export function buildBrandExtractPrompt(url: string, websiteText: string): string {
+  const clipped = websiteText.slice(0, 6000);
+  return `לפניך טקסט שנשאב מאתר האינטרנט של עסק (${url}). חלץ ממנו פרופיל מותג ראשוני לצורך בניית קמפיינים ב-Meta.\n\nטקסט מהאתר:\n"""\n${clipped}\n"""\n\nעל בסיס הטקסט בלבד (אל תמציא עובדות שלא מופיעות), החזר JSON עם: suggestedIndustry (תחום העסק במילה-שתיים), mainProduct (המוצר/שירות המרכזי במשפט), keyBenefits (מערך יתרונות מרכזיים שהעסק מדגיש), differentiation (במה העסק מבדל את עצמו), customerPains (מערך כאבים של קהל היעד שהאתר מנסה לפתור), commonObjections (מערך התנגדויות/שאלות נפוצות שלקוח עשוי לשאול), brandTone (אחד מ: luxury/direct/casual/professional/funny/emotional/aggressive/gentle לפי סגנון הכתיבה באתר). אם מידע חסר — החזר מחרוזת ריקה או מערך ריק לאותו שדה. כל הטקסט בעברית.`;
+}
+
 export function buildAdsPrompt(b: BrandContext, personaNames: string[]): string {
   return `צור מנוע מודעות מלא ל-Meta עבור העסק הבא.\n\n${brandBlock(b)}\n\nפרסונות יעד: ${personaNames.join(", ") || "כללי"}\n\nהפק: 10 זוויות קמפיין, 10 hooks (עד 12 מילים כל אחד), 10 טקסטים ראשיים (במטריצת סגנונות: קצר/ארוך/רגשי/ישיר/מבוסס-הוכחה/מבוסס-כאב/מבוסס-חלום), 10 כותרות, 5 תיאורים, 5 CTAs, 5 רעיונות לתמונה, 5 רעיונות לוידאו קצר, ומערך adVariants (וריאציית מודעה מלאה לכל פרסונה) כאשר כל וריאציה כוללת: persona, angle, hook, primaryText, headline, description, cta, creativeBrief (concept/visualDirection/textOnImage/format), complianceNotes, confidenceScore (0-100), whyItWorks, variantStyle. הקפד על ההגבלות ומדיניות הפרסום. החזר JSON.`;
 }

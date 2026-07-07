@@ -119,6 +119,9 @@ export const api = {
   // competitor research
   runResearch: (clientId: string) => post<any>(`/clients/${clientId}/research`),
 
+  // brand DNA extraction (magic fill from website)
+  extractBrand: (url: string) => post<any>("/clients/extract-brand", { url }),
+
   // personas
   personas: (clientId: string) => get<any[]>(`/clients/${clientId}/personas`),
   generatePersonas: (clientId: string, count = 4) =>
