@@ -5,12 +5,13 @@ import { CampaignsController } from "./campaigns.controller";
 import { CampaignsService } from "./campaigns.service";
 import { GenerationService } from "./generation.service";
 import { ApprovalsService } from "./approvals.service";
+import { AbTestsService } from "./ab-tests.service";
 import { PublishService } from "./publish.service";
 
 @Module({
   imports: [AgentsModule, MetaModule],
   controllers: [CampaignsController],
-  providers: [CampaignsService, GenerationService, ApprovalsService, PublishService],
+  providers: [CampaignsService, GenerationService, ApprovalsService, AbTestsService, PublishService],
   exports: [CampaignsService],
 })
 export class CampaignsModule {}

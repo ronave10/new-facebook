@@ -23,6 +23,9 @@ import type {
   MetaPageInfo,
   MetaPixelInfo,
   InterestSearchQuery,
+  SplitTestSpec,
+  SplitTestInfo,
+  SplitTestStatus,
 } from "../types";
 
 /**
@@ -320,6 +323,45 @@ export class McpMetaConnector implements MetaConnector {
       path: r.path,
       topic: r.topic,
     }));
+  }
+
+  async createSplitTest(
+    _ctx: MetaConnectorContext,
+    adAccountId: string,
+    spec: SplitTestSpec,
+  ): Promise<{ id: string; status: SplitTestStatus }> {
+    const res = await this.transport.callTool("ads_experiment_abtest_create_test", {
+      ad_account_id: adAccountId,
+      name: spec.name,
+      metric: spec.metric,
+      cells: spec.cells.map((c) => ({ name: c.name, entity_id: c.metaEntityId })),
+      ...(spec.startTime ? { start_time: spec.startTime } : {}),
+      ...(spec.endTime ? { end_time: spec.endTime } : {}),
+    });
+    const row = arr(res)[0] ?? (res as any);
+    return { id: String(row?.id ?? row?.test_id ?? ""), status: "RUNNING" };
+  }
+
+  async getSplitTest(_ctx: MetaConnectorContext, testId: string): Promise<SplitTestInfo> {
+    const res = await this.transport.callTool("ads_experiment_abtest_get_test", { test_id: testId });
+    const row = arr(res)[0] ?? (res as any);
+    const cells = (row?.cells ?? []).map((c: any) => ({
+      id: String(c.id ?? ""),
+      name: c.name ?? "",
+      metaEntityId: c.entity_id,
+      impressions: Number(c.impressions ?? 0),
+      clicks: Number(c.clicks ?? 0),
+      conversions: Number(c.conversions ?? c.results ?? 0),
+    }));
+    return {
+      id: String(row?.id ?? testId),
+      name: row?.name ?? "",
+      status: (row?.status ?? "RUNNING") as SplitTestStatus,
+      cells,
+      winnerCellId: row?.winner_cell_id,
+      startTime: row?.start_time,
+      endTime: row?.end_time,
+    };
   }
 
   async getLead(_ctx: MetaConnectorContext, leadId: string): Promise<MetaLeadInfo> {

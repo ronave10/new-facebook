@@ -452,10 +452,55 @@ model Campaign {
   strategy CampaignStrategy?
   adSets   AdSet[]
   ads      Ad[]
+  abTests  AbTest[]
 
   @@index([organizationId, clientId])
   @@index([organizationId, status])
   @@map("campaigns")
+}
+
+enum AbTestStatus {
+  DRAFT
+  PENDING_APPROVAL
+  RUNNING
+  CONCLUDED
+  CANCELLED
+}
+
+// A split test registered on a campaign. DRAFT until launched; launching goes
+// through an Approval (entityType AB_TEST) and creates a Meta Experiment.
+model AbTest {
+  id             String       @id @default(cuid())
+  organizationId String
+  clientId       String
+  campaignId     String
+  name           String
+  hypothesis     String?
+  // metric under test: "CVR" (leads/clicks) or "CTR" (clicks/impressions)
+  metric         String       @default("CVR")
+  status         AbTestStatus @default(DRAFT)
+  // the two competing entities (internal Ad.id or AdSet.id) + display labels
+  level          SnapshotLevel @default(AD)
+  cellAId        String
+  cellALabel     String
+  cellBId        String
+  cellBLabel     String
+  metaTestId     String?
+  startAt        DateTime?
+  endAt          DateTime?
+  // latest computed significance snapshot (marketing-core AbTestResult)
+  result         Json?
+  winnerCellId   String?
+  createdById    String?
+  launchedById   String?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, clientId])
+  @@index([organizationId, campaignId])
+  @@map("ab_tests")
 }
 
 model CampaignStrategy {
@@ -694,6 +739,7 @@ enum ApprovalEntityType {
   BUDGET_CHANGE
   STATUS_CHANGE
   CONNECTION
+  AB_TEST
 }
 
 enum ApprovalAction {

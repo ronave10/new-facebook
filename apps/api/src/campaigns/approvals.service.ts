@@ -133,12 +133,21 @@ export class ApprovalsService {
       take: 100,
     });
     // enrich with entity name
-    const campaignIds = approvals.filter((a) => a.entityType === "CAMPAIGN").map((a) => a.entityId);
+    const campaignIds = approvals
+      .filter((a) => a.entityType === "CAMPAIGN" || a.entityType === "BUDGET_CHANGE")
+      .map((a) => a.entityId);
     const campaigns = await this.prisma.campaign.findMany({
       where: { id: { in: campaignIds } },
       select: { id: true, name: true },
     });
-    const nameById = new Map(campaigns.map((c) => [c.id, c.name]));
+    const abTestIds = approvals.filter((a) => a.entityType === "AB_TEST").map((a) => a.entityId);
+    const abTests = abTestIds.length
+      ? await this.prisma.abTest.findMany({ where: { id: { in: abTestIds } }, select: { id: true, name: true } })
+      : [];
+    const nameById = new Map<string, string>([
+      ...campaigns.map((c) => [c.id, c.name] as [string, string]),
+      ...abTests.map((t) => [t.id, `מבחן A/B: ${t.name}`] as [string, string]),
+    ]);
     const requesterIds = [...new Set(approvals.map((a) => a.requestedById))];
     const users = await this.prisma.user.findMany({ where: { id: { in: requesterIds } }, select: { id: true, name: true } });
     const userName = new Map(users.map((u) => [u.id, u.name]));
@@ -188,6 +197,11 @@ export class ApprovalsService {
       return this.decideBudgetChange(user, approval, approve, reason);
     }
 
+    // A/B launch approvals create a Meta Experiment on approval (and are consumed).
+    if (approval.entityType === "AB_TEST") {
+      return this.decideAbTestLaunch(user, approval, approve, reason);
+    }
+
     const updated = await this.prisma.approval.update({
       where: { id: approvalId },
       data: {
@@ -215,6 +229,85 @@ export class ApprovalsService {
       entityType: "campaign",
       entityId: approval.entityId,
       metadata: { approvalId, reason },
+    });
+    return updated;
+  }
+
+  /** Launches an approved split test as a Meta Experiment, then consumes the approval. */
+  private async decideAbTestLaunch(
+    user: AuthContext,
+    approval: { id: string; entityId: string; payloadPreview: unknown; payloadHash: string },
+    approve: boolean,
+    reason?: string,
+  ) {
+    if (!approve) {
+      const [updated] = await this.prisma.$transaction([
+        this.prisma.approval.update({
+          where: { id: approval.id },
+          data: { status: "REJECTED", decidedById: user.userId, decidedAt: new Date(), reason },
+        }),
+        this.prisma.abTest.updateMany({
+          where: { id: approval.entityId, organizationId: user.organizationId, status: "PENDING_APPROVAL" },
+          data: { status: "DRAFT" },
+        }),
+      ]);
+      return updated;
+    }
+
+    // payloadPreview is the immutable, approved spec (jsonb round-trips lose key
+    // order, so we execute it directly rather than re-hashing — as decideBudgetChange does).
+    const spec = approval.payloadPreview as {
+      abTestId: string;
+      adAccountId: string;
+      connectionId: string;
+      name: string;
+      metric: string;
+      cells: { name: string; metaEntityId: string }[];
+    };
+    const test = await this.prisma.abTest.findFirst({
+      where: { id: spec.abTestId, organizationId: user.organizationId },
+    });
+    if (!test) throw AppException.notFound("המבחן לא נמצא");
+    // Drift guard: the test must still be awaiting this launch (not cancelled/relaunched).
+    if (test.status !== "PENDING_APPROVAL") {
+      throw AppException.conflict("מצב המבחן השתנה מאז הבקשה. יש לבקש שוב.", "AB_TEST_STALE");
+    }
+
+    const ctx = await this.meta.context(user.organizationId, spec.connectionId);
+    const created = await this.callLogger.wrap(
+      {
+        organizationId: user.organizationId,
+        connectionId: spec.connectionId,
+        operation: "createSplitTest",
+        isWrite: true,
+        approvalId: approval.id,
+        requestInfo: { name: spec.name, cells: spec.cells.length },
+      },
+      () =>
+        this.meta.connector().createSplitTest(ctx, spec.adAccountId, {
+          name: spec.name,
+          metric: spec.metric,
+          cells: spec.cells,
+        }),
+    );
+
+    const [updated] = await this.prisma.$transaction([
+      this.prisma.approval.update({
+        where: { id: approval.id },
+        data: { status: "CONSUMED", decidedById: user.userId, decidedAt: new Date(), consumedAt: new Date(), reason },
+      }),
+      this.prisma.abTest.update({
+        where: { id: test.id },
+        data: { status: "RUNNING", metaTestId: created.id, startAt: new Date(), launchedById: user.userId },
+      }),
+    ]);
+    await this.audit.log({
+      organizationId: user.organizationId,
+      actorId: user.userId,
+      action: "abtest.launch",
+      entityType: "ab_test",
+      entityId: test.id,
+      metadata: { approvalId: approval.id, metaTestId: created.id },
     });
     return updated;
   }

@@ -25,6 +25,9 @@ import {
   type MetaPageInfo,
   type MetaPixelInfo,
   type InterestSearchQuery,
+  type SplitTestSpec,
+  type SplitTestInfo,
+  type SplitTestStatus,
 } from "../types";
 
 export interface MarketingApiOptions {
@@ -437,6 +440,49 @@ export class MarketingApiConnector implements MetaConnector {
       path: r.path,
       topic: r.topic,
     }));
+  }
+
+  async createSplitTest(
+    ctx: MetaConnectorContext,
+    adAccountId: string,
+    spec: SplitTestSpec,
+  ): Promise<{ id: string; status: SplitTestStatus }> {
+    // Meta Experiments: POST /act_<id>/ad_studies with test cells.
+    const cells = spec.cells.map((c) => ({
+      name: c.name,
+      treatment_percentage: Math.floor(100 / spec.cells.length),
+      adentities_to_include: [c.metaEntityId],
+    }));
+    const res = await this.post<{ id: string }>(ctx, `/act_${adAccountId}/ad_studies`, {
+      name: spec.name,
+      type: "SPLIT_TEST",
+      cells: JSON.stringify(cells),
+      objectives: JSON.stringify([{ name: spec.metric, type: spec.metric }]),
+      ...(spec.startTime ? { start_time: spec.startTime } : {}),
+      ...(spec.endTime ? { end_time: spec.endTime } : {}),
+    });
+    return { id: res.id, status: "RUNNING" };
+  }
+
+  async getSplitTest(ctx: MetaConnectorContext, testId: string): Promise<SplitTestInfo> {
+    const data = await this.get<any>(ctx, `/${testId}`, {
+      fields: "id,name,cooldown_start_time,end_time,start_time,cells{id,name,control_percentage}",
+    });
+    const cells = (data.cells?.data ?? []).map((c: any) => ({
+      id: String(c.id),
+      name: c.name ?? "",
+      impressions: Number(c.impressions ?? 0),
+      clicks: Number(c.clicks ?? 0),
+      conversions: Number(c.conversions ?? 0),
+    }));
+    return {
+      id: String(data.id),
+      name: data.name ?? "",
+      status: data.end_time ? "CONCLUDED" : "RUNNING",
+      cells,
+      startTime: data.start_time,
+      endTime: data.end_time,
+    };
   }
 
   async getLead(ctx: MetaConnectorContext, leadId: string): Promise<MetaLeadInfo> {

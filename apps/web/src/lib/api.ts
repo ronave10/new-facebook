@@ -183,6 +183,16 @@ export const api = {
     get<any[]>(`/analytics/campaign/${campaignId}/timeseries?granularity=${granularity}`),
   campaignAbTest: (campaignId: string, a?: string, b?: string) =>
     get<any>(`/analytics/campaign/${campaignId}/ab-test${a && b ? `?a=${a}&b=${b}` : ""}`),
+
+  // managed A/B tests (split-test execution)
+  abTests: (campaignId: string) => get<any[]>(`/campaigns/${campaignId}/ab-tests`),
+  createAbTest: (
+    campaignId: string,
+    b: { name: string; hypothesis?: string; metric: string; level: string; cellAId: string; cellBId: string },
+  ) => post<any>(`/campaigns/${campaignId}/ab-tests`, b),
+  requestAbLaunch: (testId: string) => post<any>(`/ab-tests/${testId}/request-launch`),
+  refreshAbTest: (testId: string) => post<any>(`/ab-tests/${testId}/refresh`),
+  cancelAbTest: (testId: string) => del<any>(`/ab-tests/${testId}`),
   accountAudit: (clientId: string) => get<any>(`/analytics/client/${clientId}/audit`),
   auditReportHtml: (clientId: string) => getText(`/analytics/client/${clientId}/audit/report`),
   recommendations: (clientId?: string, status?: string) =>

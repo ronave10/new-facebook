@@ -22,6 +22,9 @@ import type {
   MetaPageInfo,
   MetaPixelInfo,
   InterestSearchQuery,
+  SplitTestSpec,
+  SplitTestInfo,
+  SplitTestStatus,
 } from "./types";
 
 /**
@@ -106,6 +109,16 @@ export interface MetaConnector {
 
   /** Search Meta's detailed-targeting taxonomy (interests/behaviors) for ad set targeting. */
   searchInterests(ctx: MetaConnectorContext, query: InterestSearchQuery): Promise<MetaInterest[]>;
+
+  // ── Experiments / split tests (spend-affecting → gated by an Approval) ──
+  /** Create a Meta Experiment (split test) between cells. Returns the test id + status. */
+  createSplitTest(
+    ctx: MetaConnectorContext,
+    adAccountId: string,
+    spec: SplitTestSpec,
+  ): Promise<{ id: string; status: SplitTestStatus }>;
+  /** Read a split test's status and per-cell metrics. */
+  getSplitTest(ctx: MetaConnectorContext, testId: string): Promise<SplitTestInfo>;
 
   // ── Custom audiences (remarketing / lookalikes) ──
   listCustomAudiences(ctx: MetaConnectorContext, adAccountId: string): Promise<MetaCustomAudienceInfo[]>;

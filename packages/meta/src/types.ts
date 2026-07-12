@@ -195,6 +195,43 @@ export interface AdLibraryQuery {
   limit?: number;
 }
 
+/** A cell (arm) of a split test — references an existing ad/adset entity. */
+export interface SplitTestCellSpec {
+  name: string;
+  /** Meta entity id (ad or adset) participating in this cell. */
+  metaEntityId: string;
+}
+
+export interface SplitTestSpec {
+  name: string;
+  cells: SplitTestCellSpec[];
+  /** Optimization metric, e.g. "CONVERSIONS" | "LINK_CLICKS". */
+  metric: string;
+  startTime?: string;
+  endTime?: string;
+}
+
+export interface SplitTestCellInfo {
+  id: string;
+  name: string;
+  metaEntityId?: string;
+  impressions: number;
+  clicks: number;
+  conversions: number;
+}
+
+export type SplitTestStatus = "SCHEDULED" | "RUNNING" | "CONCLUDED" | "CANCELLED";
+
+export interface SplitTestInfo {
+  id: string;
+  name: string;
+  status: SplitTestStatus;
+  cells: SplitTestCellInfo[];
+  winnerCellId?: string;
+  startTime?: string;
+  endTime?: string;
+}
+
 /** A Meta detailed-targeting item (interest / behavior / demographic). */
 export interface MetaInterest {
   id: string;

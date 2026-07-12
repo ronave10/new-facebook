@@ -11,6 +11,7 @@ import { CampaignStatusBadge, ApprovalStatusBadge } from "@/components/StatusBad
 import { AdPreviewCard } from "@/components/campaigns/AdPreviewCard";
 import { PayloadPreview } from "@/components/campaigns/PayloadPreview";
 import { AbTestPanel } from "@/components/campaigns/AbTestPanel";
+import { AbTestManager } from "@/components/campaigns/AbTestManager";
 import { formatCurrency } from "@/lib/format";
 
 export default function CampaignDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -43,7 +44,16 @@ export default function CampaignDetailPage({ params }: { params: Promise<{ id: s
       {tab === "details" && <DetailsTab campaign={campaign} />}
       {tab === "strategy" && <StrategyTab campaign={campaign} onDone={reload} />}
       {tab === "ads" && <AdsTab campaign={campaign} onDone={reload} />}
-      {tab === "abtest" && <AbTestPanel campaignId={campaign.id} />}
+      {tab === "abtest" && (
+        <div className="space-y-8">
+          <AbTestManager campaign={campaign} />
+          <div className="border-t border-slate-200 pt-6">
+            <h3 className="mb-1 font-semibold text-slate-900">ניתוח מהיר</h3>
+            <p className="mb-4 text-xs text-slate-500">מובהקות סטטיסטית על סמך נתוני הביצועים שנמשכו — ללא הרצת מבחן ייעודי.</p>
+            <AbTestPanel campaignId={campaign.id} />
+          </div>
+        </div>
+      )}
       {tab === "review" && <ReviewTab campaign={campaign} onDone={reload} />}
     </div>
   );

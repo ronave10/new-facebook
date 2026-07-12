@@ -284,3 +284,20 @@ export const decideRecommendationSchema = z.object({
 });
 
 export const generateRecommendationsSchema = z.object({ clientId: z.string().min(1) });
+
+// ─────────────────────────── A/B tests (split-test execution) ───────────────────────────
+
+export const createAbTestSchema = z
+  .object({
+    name: z.string().min(2, "יש להזין שם למבחן"),
+    hypothesis: z.string().optional(),
+    metric: z.enum(["CVR", "CTR"]).default("CVR"),
+    level: z.enum(["AD", "AD_SET"]).default("AD"),
+    cellAId: z.string().min(1, "יש לבחור וריאציה A"),
+    cellBId: z.string().min(1, "יש לבחור וריאציה B"),
+  })
+  .refine((v) => v.cellAId !== v.cellBId, {
+    message: "יש לבחור שתי וריאציות שונות",
+    path: ["cellBId"],
+  });
+export type CreateAbTestInput = z.infer<typeof createAbTestSchema>;

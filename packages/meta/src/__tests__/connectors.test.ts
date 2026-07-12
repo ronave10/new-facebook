@@ -72,6 +72,26 @@ describe("MockMetaConnector", () => {
     expect(lead.fieldData.some((f) => f.name === "email")).toBe(true);
   });
 
+  it("creates a split test and reads back two cells with metrics", async () => {
+    const c: MetaConnector = new MockMetaConnector();
+    const created = await c.createSplitTest(ctx, "1", {
+      name: "hook test",
+      metric: "CONVERSIONS",
+      cells: [
+        { name: "A", metaEntityId: "ad_1" },
+        { name: "B", metaEntityId: "ad_2" },
+      ],
+    });
+    expect(created.id).toContain("mock_study");
+    expect(created.status).toBe("RUNNING");
+    const info = await c.getSplitTest(ctx, created.id);
+    expect(info.cells.length).toBe(2);
+    expect(info.cells[0].impressions).toBeGreaterThan(0);
+    expect(info.cells[0].conversions).toBeGreaterThanOrEqual(0);
+    // deterministic
+    expect(await c.getSplitTest(ctx, created.id)).toEqual(info);
+  });
+
   it("searches detailed-targeting interests filtered by query", async () => {
     const c: MetaConnector = new MockMetaConnector();
     const hits = await c.searchInterests(ctx, { q: "כושר" });

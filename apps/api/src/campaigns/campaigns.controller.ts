@@ -1,5 +1,6 @@
 import { Body, Controller, Delete, Get, Param, Post, Put, Query } from "@nestjs/common";
 import {
+  createAbTestSchema,
   createCampaignSchema,
   decideApprovalSchema,
   generateAdsSchema,
@@ -11,6 +12,7 @@ import { ZodValidationPipe } from "../core/zod-validation.pipe";
 import { CampaignsService } from "./campaigns.service";
 import { GenerationService } from "./generation.service";
 import { ApprovalsService } from "./approvals.service";
+import { AbTestsService } from "./ab-tests.service";
 import { PublishService } from "./publish.service";
 
 @Controller()
@@ -19,6 +21,7 @@ export class CampaignsController {
     private readonly campaigns: CampaignsService,
     private readonly generation: GenerationService,
     private readonly approvals: ApprovalsService,
+    private readonly abTests: AbTestsService,
     private readonly publisher: PublishService,
   ) {}
 
@@ -120,5 +123,40 @@ export class CampaignsController {
     @Body(new ZodValidationPipe(decideApprovalSchema)) body: any,
   ) {
     return this.approvals.decide(user, id, false, body.reason);
+  }
+
+  // ── A/B tests (split-test execution) ──
+  @Get("campaigns/:id/ab-tests")
+  @RequirePermission("campaign.read")
+  listAbTests(@CurrentUser() user: AuthContext, @Param("id") id: string) {
+    return this.abTests.list(user, id);
+  }
+
+  @Post("campaigns/:id/ab-tests")
+  @RequirePermission("campaign.write")
+  createAbTest(
+    @CurrentUser() user: AuthContext,
+    @Param("id") id: string,
+    @Body(new ZodValidationPipe(createAbTestSchema)) body: any,
+  ) {
+    return this.abTests.create(user, id, body);
+  }
+
+  @Post("ab-tests/:id/request-launch")
+  @RequirePermission("campaign.write")
+  requestAbLaunch(@CurrentUser() user: AuthContext, @Param("id") id: string) {
+    return this.abTests.requestLaunch(user, id);
+  }
+
+  @Post("ab-tests/:id/refresh")
+  @RequirePermission("campaign.read")
+  refreshAbTest(@CurrentUser() user: AuthContext, @Param("id") id: string) {
+    return this.abTests.refreshResults(user, id);
+  }
+
+  @Delete("ab-tests/:id")
+  @RequirePermission("campaign.write")
+  cancelAbTest(@CurrentUser() user: AuthContext, @Param("id") id: string) {
+    return this.abTests.cancel(user, id);
   }
 }

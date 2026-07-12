@@ -23,6 +23,9 @@ import type {
   MetaPageInfo,
   MetaPixelInfo,
   InterestSearchQuery,
+  SplitTestSpec,
+  SplitTestInfo,
+  SplitTestStatus,
 } from "../types";
 
 interface MockEntity {
@@ -385,6 +388,32 @@ export class MockMetaConnector implements MetaConnector {
         topic: c.topic,
       };
     });
+  }
+
+  async createSplitTest(
+    _ctx: MetaConnectorContext,
+    _adAccountId: string,
+    spec: SplitTestSpec,
+  ): Promise<{ id: string; status: SplitTestStatus }> {
+    const id = `mock_study_${Math.round(seed01(spec.name + spec.cells.map((c) => c.metaEntityId).join()) * 1e9)}`;
+    return { id, status: "RUNNING" };
+  }
+
+  async getSplitTest(_ctx: MetaConnectorContext, testId: string): Promise<SplitTestInfo> {
+    // Deterministic two-cell result: cell A meaningfully beats cell B.
+    const base = seed01(testId);
+    const impA = 8000 + Math.round(base * 4000);
+    const impB = 8000 + Math.round(seed01(testId + "b") * 4000);
+    return {
+      id: testId,
+      name: "מבחן פיצול",
+      status: "RUNNING",
+      cells: [
+        { id: `${testId}_A`, name: "וריאציה A", impressions: impA, clicks: Math.round(impA * 0.03), conversions: Math.round(impA * 0.03 * 0.09) },
+        { id: `${testId}_B`, name: "וריאציה B", impressions: impB, clicks: Math.round(impB * 0.028), conversions: Math.round(impB * 0.028 * 0.05) },
+      ],
+      startTime: isoDaysAgo(7),
+    };
   }
 
   async getLead(_ctx: MetaConnectorContext, leadId: string): Promise<MetaLeadInfo> {
