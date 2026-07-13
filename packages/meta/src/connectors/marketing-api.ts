@@ -465,19 +465,29 @@ export class MarketingApiConnector implements MetaConnector {
   }
 
   async getSplitTest(ctx: MetaConnectorContext, testId: string): Promise<SplitTestInfo> {
+    // NOTE: the exact ad_studies cell schema (per-cell entity association and
+    // metric fields) is UNVERIFIED against live Graph v23 and must be validated
+    // before production use. We read entity ids into `metaEntityId` for
+    // attribution; if Graph omits them, AbTestsService.refreshResults FAILS CLOSED
+    // (throws AB_ATTRIBUTION_FAILED) rather than mis-attributing by array position.
     const data = await this.get<any>(ctx, `/${testId}`, {
-      fields:
-        "id,name,end_time,start_time,cells{id,name,treatment_percentage,adentities_to_include,impressions,clicks,conversions}",
+      fields: "id,name,end_time,start_time,cells",
     });
-    const cells = (data.cells?.data ?? []).map((c: any) => ({
-      id: String(c.id),
-      name: c.name ?? "",
-      // Tie the cell back to the ad entity it tests, for correct attribution.
-      metaEntityId: Array.isArray(c.adentities_to_include) ? String(c.adentities_to_include[0] ?? "") : undefined,
-      impressions: Number(c.impressions ?? 0),
-      clicks: Number(c.clicks ?? 0),
-      conversions: Number(c.conversions ?? 0),
-    }));
+    const rawCells: any[] = data.cells?.data ?? data.cells ?? [];
+    const cells = rawCells.map((c: any) => {
+      const entities = c.adentities_to_include ?? c.treatment_group ?? c.adentities;
+      return {
+        id: String(c.id ?? ""),
+        name: c.name ?? "",
+        // Tie the cell back to the ad entity it tests, for correct attribution.
+        metaEntityId: Array.isArray(entities) ? String(entities[0] ?? "") || undefined : entities ? String(entities) : undefined,
+        // Per-cell metrics are NOT fields on the cell node — they come from an
+        // insights call keyed by the cell/entity, which is not yet wired.
+        impressions: Number(c.impressions ?? 0),
+        clicks: Number(c.clicks ?? 0),
+        conversions: Number(c.conversions ?? 0),
+      };
+    });
     return {
       id: String(data.id),
       name: data.name ?? "",
@@ -489,7 +499,10 @@ export class MarketingApiConnector implements MetaConnector {
   }
 
   async stopSplitTest(ctx: MetaConnectorContext, _adAccountId: string, testId: string): Promise<void> {
-    // End the experiment now so it stops delivering/spending.
+    // Ends the experiment. LIMITATION: ending an ad_study stops the study but does
+    // NOT necessarily pause the underlying ad entities' delivery — the caller
+    // (AbTestsService.cancel) should also pause the participating ads to fully halt
+    // spend. Unverified against live Graph.
     await this.post<{ success: boolean }>(ctx, `/${testId}`, { end_time: new Date().toISOString() });
   }
 

@@ -232,15 +232,23 @@ export class AbTestsService {
       });
       if (!account) throw AppException.badRequest("לא נבחר חשבון מודעות", "NO_AD_ACCOUNT");
       const ctx = await this.meta.context(user.organizationId, account.connectionId);
+      const connector = this.meta.connector();
       await this.callLogger.wrap(
-        {
-          organizationId: user.organizationId,
-          connectionId: account.connectionId,
-          operation: "stopSplitTest",
-          isWrite: true,
-        },
-        () => this.meta.connector().stopSplitTest(ctx, account.accountId, test.metaTestId!),
+        { organizationId: user.organizationId, connectionId: account.connectionId, operation: "stopSplitTest", isWrite: true },
+        () => connector.stopSplitTest(ctx, account.accountId, test.metaTestId!),
       );
+      // Ending the study alone may not halt delivery — pause the participating
+      // entities so spend actually stops.
+      const entityType = test.level === "AD_SET" ? "ad_set" : "ad";
+      for (const metaId of [test.cellAMetaId, test.cellBMetaId]) {
+        if (!metaId) continue;
+        await this.callLogger
+          .wrap(
+            { organizationId: user.organizationId, connectionId: account.connectionId, operation: "pauseEntity", isWrite: true },
+            () => connector.pauseEntity(ctx, account.accountId, entityType, metaId),
+          )
+          .catch((e) => this.logger.warn(`AB test ${test.id}: failed to pause ${metaId}: ${(e as Error).message}`));
+      }
     }
 
     await this.prisma.$transaction([
@@ -295,16 +303,22 @@ export class AbTestsService {
     // Attribute live cells to OUR cells by the entity id we launched — never by
     // array position (Meta returns cells in arbitrary order; positional matching
     // would glue the wrong ad's metrics to a variant and mis-declare the winner).
+    // If we can't match BOTH cells by entity id, we FAIL CLOSED (throw) rather than
+    // guess — a wrong winner would move budget to the losing ad.
     const findByEntity = (metaId: string | null) =>
       metaId ? info.cells.find((c) => c.metaEntityId && c.metaEntityId === metaId) : undefined;
-    let aCell = findByEntity(test.cellAMetaId);
-    let bCell = findByEntity(test.cellBMetaId);
+    const aCell = findByEntity(test.cellAMetaId);
+    const bCell = findByEntity(test.cellBMetaId);
     if (!aCell || !bCell || aCell === bCell) {
       this.logger.warn(
-        `AB test ${test.id}: could not attribute cells by entity id (cells lack matching metaEntityId); falling back to positional order`,
+        `AB test ${test.id}: cannot attribute live cells by entity id (cellAMetaId=${test.cellAMetaId}, cellBMetaId=${test.cellBMetaId}, live=${info.cells
+          .map((c) => c.metaEntityId)
+          .join(",")}) — refusing to report a possibly-wrong winner`,
       );
-      aCell = info.cells[0];
-      bCell = info.cells[1];
+      throw AppException.conflict(
+        "לא ניתן לשייך את תוצאות המבחן לוריאציות (מזהי Meta חסרים או לא תואמים). נסה שוב מאוחר יותר.",
+        "AB_ATTRIBUTION_FAILED",
+      );
     }
 
     const result = evaluateAbTest(

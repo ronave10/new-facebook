@@ -28,10 +28,20 @@ function baseDeps() {
   const crypto: any = { hashJson: () => "hash" };
   const audit: any = { log: vi.fn() };
   const campaigns: any = { loadScoped: vi.fn().mockResolvedValue({ id: "c1" }) };
-  const connector: any = { getSplitTest: vi.fn(), stopSplitTest: vi.fn().mockResolvedValue(undefined) };
+  const connector: any = {
+    getSplitTest: vi.fn(),
+    stopSplitTest: vi.fn().mockResolvedValue(undefined),
+    pauseEntity: vi.fn().mockResolvedValue(undefined),
+  };
   const meta: any = { context: vi.fn().mockResolvedValue({}), connector: () => connector };
-  const callLogger: any = { wrap: (_m: unknown, fn: () => unknown) => fn() };
-  return { prisma, crypto, audit, campaigns, meta, callLogger, connector };
+  const wrapCalls: any[] = [];
+  const callLogger: any = {
+    wrap: (m: any, fn: () => unknown) => {
+      wrapCalls.push(m);
+      return fn();
+    },
+  };
+  return { prisma, crypto, audit, campaigns, meta, callLogger, connector, wrapCalls };
 }
 
 async function makeService(d: ReturnType<typeof baseDeps>) {
@@ -111,14 +121,72 @@ describe("AbTestsService safety", () => {
     expect(data.result.control.id).toBe("adB");
   });
 
-  it("stops the live Meta experiment when cancelling a RUNNING test (#2)", async () => {
+  it("stops the study, pauses the ads, and writes CANCELLED when cancelling a RUNNING test (#2/#6/#10)", async () => {
     const d = baseDeps();
     d.prisma.abTest.findFirst.mockResolvedValue({
       id: "t1", organizationId: "org1", clientId: "cl1", status: "RUNNING", metaTestId: "mt1",
+      level: "AD", cellAMetaId: "m_A", cellBMetaId: "m_B",
     });
     const svc = await makeService(d);
     await svc.cancel(owner as any, "t1");
+    // stops the experiment...
     expect(d.connector.stopSplitTest).toHaveBeenCalledWith(expect.anything(), "act1", "mt1");
+    // ...and actually pauses BOTH participating ads so spend halts (#6)
+    expect(d.connector.pauseEntity).toHaveBeenCalledWith(expect.anything(), "act1", "ad", "m_A");
+    expect(d.connector.pauseEntity).toHaveBeenCalledWith(expect.anything(), "act1", "ad", "m_B");
+    // ...every Meta write is audited as isWrite (#8)
+    expect(d.wrapCalls.filter((c) => c.operation === "stopSplitTest").every((c) => c.isWrite)).toBe(true);
+    expect(d.wrapCalls.filter((c) => c.operation === "pauseEntity").every((c) => c.isWrite)).toBe(true);
+    // ...and the local row is actually written CANCELLED (#10)
+    const upd = d.prisma.abTest.update.mock.calls[0][0];
+    expect(upd.data.status).toBe("CANCELLED");
+  });
+
+  it("fails CLOSED when live cells cannot be attributed by entity id (#1/#12)", async () => {
+    const d = baseDeps();
+    d.prisma.abTest.findFirst.mockResolvedValue({
+      id: "t1", organizationId: "org1", clientId: "cl1", status: "RUNNING", metaTestId: "mt1",
+      metric: "CVR", cellAId: "adA", cellALabel: "A", cellBId: "adB", cellBLabel: "B",
+      cellAMetaId: "meta_A", cellBMetaId: "meta_B",
+    });
+    // one cell's entity id is missing (as real Graph may omit adentities) → cannot match
+    d.connector.getSplitTest.mockResolvedValue({
+      id: "mt1", status: "RUNNING",
+      cells: [
+        { id: "c0", metaEntityId: "meta_B", impressions: 10000, clicks: 100, conversions: 5 },
+        { id: "c1", metaEntityId: "", impressions: 10000, clicks: 100, conversions: 50 }, // really meta_A but unlabeled
+      ],
+    });
+    const svc = await makeService(d);
+    await expect(svc.refreshResults(owner as any, "t1")).rejects.toThrow(/AB_ATTRIBUTION_FAILED|לשייך/);
+    // must NOT persist a (possibly wrong) winner
+    expect(d.prisma.abTest.update).not.toHaveBeenCalled();
+  });
+
+  it("uses impressions/clicks for a CTR test and concludes when Meta says so (#9/#11)", async () => {
+    const d = baseDeps();
+    d.prisma.abTest.findFirst.mockResolvedValue({
+      id: "t1", organizationId: "org1", clientId: "cl1", status: "RUNNING", metaTestId: "mt1",
+      metric: "CTR", cellAId: "adA", cellALabel: "A", cellBId: "adB", cellBLabel: "B",
+      cellAMetaId: "meta_A", cellBMetaId: "meta_B",
+    });
+    d.connector.getSplitTest.mockResolvedValue({
+      id: "mt1", status: "CONCLUDED",
+      cells: [
+        { id: "c0", metaEntityId: "meta_A", impressions: 10000, clicks: 500, conversions: 0 }, // 5% CTR
+        { id: "c1", metaEntityId: "meta_B", impressions: 10000, clicks: 250, conversions: 0 }, // 2.5% CTR
+      ],
+    });
+    const svc = await makeService(d);
+    await svc.refreshResults(owner as any, "t1");
+    const data = d.prisma.abTest.update.mock.calls[0][0].data;
+    // CTR uses impressions as trials, clicks as successes
+    expect(data.result.variant.trials).toBe(10000);
+    expect(data.result.variant.successes).toBe(500);
+    expect(data.result.variant.id).toBe("adA");
+    // concluded transition persisted
+    expect(data.status).toBe("CONCLUDED");
+    expect(data.endAt).toBeInstanceOf(Date);
   });
 
   it("refuses to cancel a concluded test (#2 guard)", async () => {

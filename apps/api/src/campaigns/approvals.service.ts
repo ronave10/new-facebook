@@ -132,26 +132,43 @@ export class ApprovalsService {
       orderBy: { createdAt: "desc" },
       take: 100,
     });
-    // enrich with entity name
+    // enrich with entity name + owning client (Approval has no clientId column, so
+    // we resolve it via the entity to enforce CLIENT_VIEWER scope below).
     const campaignIds = approvals
       .filter((a) => a.entityType === "CAMPAIGN" || a.entityType === "BUDGET_CHANGE")
       .map((a) => a.entityId);
     const campaigns = await this.prisma.campaign.findMany({
       where: { id: { in: campaignIds } },
-      select: { id: true, name: true },
+      select: { id: true, name: true, clientId: true },
     });
     const abTestIds = approvals.filter((a) => a.entityType === "AB_TEST").map((a) => a.entityId);
     const abTests = abTestIds.length
-      ? await this.prisma.abTest.findMany({ where: { id: { in: abTestIds } }, select: { id: true, name: true } })
+      ? await this.prisma.abTest.findMany({ where: { id: { in: abTestIds } }, select: { id: true, name: true, clientId: true } })
       : [];
     const nameById = new Map<string, string>([
       ...campaigns.map((c) => [c.id, c.name] as [string, string]),
       ...abTests.map((t) => [t.id, `מבחן A/B: ${t.name}`] as [string, string]),
     ]);
-    const requesterIds = [...new Set(approvals.map((a) => a.requestedById))];
+    const clientByEntity = new Map<string, string>([
+      ...campaigns.map((c) => [c.id, c.clientId] as [string, string]),
+      ...abTests.map((t) => [t.id, t.clientId] as [string, string]),
+    ]);
+
+    // Client-scoping: a scoped CLIENT_VIEWER only sees approvals for its clients.
+    // Rows that don't resolve to an in-scope client (or to no client at all, e.g.
+    // CONNECTION) are hidden — fail closed.
+    const scoped =
+      user.role === "CLIENT_VIEWER" && user.clientScope.length > 0
+        ? approvals.filter((a) => {
+            const clientId = clientByEntity.get(a.entityId);
+            return clientId ? user.clientScope.includes(clientId) : false;
+          })
+        : approvals;
+
+    const requesterIds = [...new Set(scoped.map((a) => a.requestedById))];
     const users = await this.prisma.user.findMany({ where: { id: { in: requesterIds } }, select: { id: true, name: true } });
     const userName = new Map(users.map((u) => [u.id, u.name]));
-    return approvals.map((a) => ({
+    return scoped.map((a) => ({
       id: a.id,
       entityType: a.entityType,
       entityId: a.entityId,
@@ -291,24 +308,46 @@ export class ApprovalsService {
         }),
     );
 
-    const [updated] = await this.prisma.$transaction([
-      this.prisma.approval.update({
-        where: { id: approval.id },
-        data: { status: "CONSUMED", decidedById: user.userId, decidedAt: new Date(), consumedAt: new Date(), reason },
-      }),
-      this.prisma.abTest.update({
-        where: { id: test.id },
-        data: {
-          status: "RUNNING",
-          metaTestId: created.id,
-          startAt: new Date(),
-          launchedById: user.userId,
-          // Snapshot the launched entity ids so results attribute to the right cell.
-          cellAMetaId: spec.cells[0]?.metaEntityId ?? null,
-          cellBMetaId: spec.cells[1]?.metaEntityId ?? null,
-        },
-      }),
-    ]);
+    // The Meta experiment is now LIVE and spending. If persisting that fact fails,
+    // we must not leave an orphaned, unstoppable, re-approvable experiment — so we
+    // compensate by stopping it on Meta (best-effort) before surfacing the error.
+    let updated;
+    try {
+      [updated] = await this.prisma.$transaction([
+        this.prisma.approval.update({
+          where: { id: approval.id },
+          data: { status: "CONSUMED", decidedById: user.userId, decidedAt: new Date(), consumedAt: new Date(), reason },
+        }),
+        this.prisma.abTest.update({
+          where: { id: test.id },
+          data: {
+            status: "RUNNING",
+            metaTestId: created.id,
+            startAt: new Date(),
+            launchedById: user.userId,
+            // Snapshot the launched entity ids so results attribute to the right cell.
+            cellAMetaId: spec.cells[0]?.metaEntityId ?? null,
+            cellBMetaId: spec.cells[1]?.metaEntityId ?? null,
+          },
+        }),
+      ]);
+    } catch (dbErr) {
+      this.logger.error(
+        `AB launch ${test.id}: Meta study ${created.id} created but DB commit failed — compensating with stopSplitTest`,
+      );
+      await this.meta
+        .connector()
+        .stopSplitTest(ctx, spec.adAccountId, created.id)
+        .catch((stopErr) =>
+          this.logger.error(
+            `AB launch ${test.id}: COMPENSATION FAILED — orphaned live study ${created.id} may still be spending: ${(stopErr as Error).message}`,
+          ),
+        );
+      throw AppException.badRequest(
+        "השקת המבחן נכשלה בשמירה ובוטלה ב-Meta. נסה שוב.",
+        "AB_LAUNCH_ROLLED_BACK",
+      );
+    }
     await this.audit.log({
       organizationId: user.organizationId,
       actorId: user.userId,

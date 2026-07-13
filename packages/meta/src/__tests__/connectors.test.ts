@@ -86,9 +86,14 @@ describe("MockMetaConnector", () => {
     expect(created.status).toBe("RUNNING");
     const info = await c.getSplitTest(ctx, created.id);
     expect(info.cells.length).toBe(2);
-    // cells carry the entity ids we launched → callers can attribute by identity, not position
-    expect(info.cells.map((x) => x.metaEntityId).sort()).toEqual(["ad_111", "ad_222"]);
-    expect(info.cells[0].impressions).toBeGreaterThan(0);
+    // cells carry the entity ids we launched → callers attribute by identity, not position
+    const cellA = info.cells.find((x) => x.metaEntityId === "ad_111");
+    const cellB = info.cells.find((x) => x.metaEntityId === "ad_222");
+    expect(cellA).toBeDefined();
+    expect(cellB).toBeDefined();
+    // metrics are entity-seeded and distinct (not shared scaffolding)
+    expect(cellA!.impressions).toBeGreaterThan(0);
+    expect(cellA!.clicks).not.toBe(cellB!.clicks);
     expect(await c.getSplitTest(ctx, created.id)).toEqual(info); // deterministic
   });
 
