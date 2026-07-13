@@ -19,6 +19,9 @@ const envSchema = z.object({
     .string()
     .regex(/^[0-9a-fA-F]{64}$/, "must be 32 bytes hex (openssl rand -hex 32)"),
   CREDENTIALS_KEY_VERSION: z.coerce.number().default(1),
+  // Retired keys kept only to DECRYPT old data during rotation, as
+  // "version:hexkey,version:hexkey". New writes always use the current key above.
+  CREDENTIALS_PREVIOUS_KEYS: z.string().optional().default(""),
 
   META_MODE: z.enum(["mock", "marketing-api", "mcp"]).default("mock"),
   META_APP_ID: z.string().optional().default(""),

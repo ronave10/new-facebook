@@ -8,7 +8,8 @@
     "build": "tsc --noEmit",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "rotate-keys": "node --env-file=.env -r @swc-node/register src/scripts/rotate-keys.ts"
   },
   "dependencies": {
     "@campaignos/ai": "workspace:*",

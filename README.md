@@ -98,6 +98,7 @@ pnpm dev
 ## 🔒 בטיחות ופרטיות
 
 - טוקנים **ו-PII של לידים** מוצפנים ב-AES-256-GCM (לעולם לא בטקסט גלוי); Data Deletion + Deauthorize callbacks מאומתי-signed_request למחיקת מידע לפי דרישה.
+- **רוטציית מפתחות הצפנה** — keyring עם גרסאות (CREDENTIALS_KEY_VERSION + CREDENTIALS_PREVIOUS_KEYS): פענוח לפי גרסת ה-blob, ועבודת רוטציה (`pnpm --filter @campaignos/api rotate-keys`) שמצפינה מחדש את כל הטוקנים והלידים למפתח הנוכחי — ללא אובדן מידע.
 - אין פרסום קמפיין בלי Approval מאושר; publish מאמת שה-payload לא השתנה מאז האישור (hash drift → 409).
 - יצירה ב-Meta תמיד במצב **PAUSED**, הפעלה רק לאחר אישור (top-down).
 - Maker-checker: מי שביקש אישור אינו יכול לאשר בעצמו כשקיים מאשר אחר.
