@@ -72,24 +72,39 @@ describe("MockMetaConnector", () => {
     expect(lead.fieldData.some((f) => f.name === "email")).toBe(true);
   });
 
-  it("creates a split test and reads back two cells with metrics", async () => {
+  it("creates a split test whose cells echo the launched entity ids (faithful attribution)", async () => {
     const c: MetaConnector = new MockMetaConnector();
     const created = await c.createSplitTest(ctx, "1", {
       name: "hook test",
       metric: "CONVERSIONS",
       cells: [
-        { name: "A", metaEntityId: "ad_1" },
-        { name: "B", metaEntityId: "ad_2" },
+        { name: "A", metaEntityId: "ad_111" },
+        { name: "B", metaEntityId: "ad_222" },
       ],
     });
     expect(created.id).toContain("mock_study");
     expect(created.status).toBe("RUNNING");
     const info = await c.getSplitTest(ctx, created.id);
     expect(info.cells.length).toBe(2);
+    // cells carry the entity ids we launched → callers can attribute by identity, not position
+    expect(info.cells.map((x) => x.metaEntityId).sort()).toEqual(["ad_111", "ad_222"]);
     expect(info.cells[0].impressions).toBeGreaterThan(0);
-    expect(info.cells[0].conversions).toBeGreaterThanOrEqual(0);
-    // deterministic
-    expect(await c.getSplitTest(ctx, created.id)).toEqual(info);
+    expect(await c.getSplitTest(ctx, created.id)).toEqual(info); // deterministic
+  });
+
+  it("stops a split test so subsequent reads report it cancelled", async () => {
+    const c: MetaConnector = new MockMetaConnector();
+    const created = await c.createSplitTest(ctx, "1", {
+      name: "stop me",
+      metric: "LINK_CLICKS",
+      cells: [
+        { name: "A", metaEntityId: "ad_a" },
+        { name: "B", metaEntityId: "ad_b" },
+      ],
+    });
+    expect((await c.getSplitTest(ctx, created.id)).status).toBe("RUNNING");
+    await c.stopSplitTest(ctx, "1", created.id);
+    expect((await c.getSplitTest(ctx, created.id)).status).toBe("CANCELLED");
   });
 
   it("searches detailed-targeting interests filtered by query", async () => {

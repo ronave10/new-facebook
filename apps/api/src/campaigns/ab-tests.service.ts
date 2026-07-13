@@ -29,6 +29,13 @@ export class AbTestsService {
     private readonly callLogger: MetaCallLogger,
   ) {}
 
+  /** Enforces CLIENT_VIEWER client-scoping (mirrors AnalyticsService.assertScope). */
+  private assertScope(user: AuthContext, clientId: string) {
+    if (user.role === "CLIENT_VIEWER" && user.clientScope.length > 0 && !user.clientScope.includes(clientId)) {
+      throw AppException.notFound("המבחן לא נמצא");
+    }
+  }
+
   /** Resolves an entity's display label + Meta id at the chosen level. */
   private async resolveCell(organizationId: string, campaignId: string, level: "AD" | "AD_SET", id: string) {
     if (level === "AD") {
@@ -54,11 +61,26 @@ export class AbTestsService {
       select: { clientId: true },
     });
     if (!campaign) throw AppException.notFound("הקמפיין לא נמצא");
+    this.assertScope(user, campaign.clientId);
 
     const [a, b] = await Promise.all([
       this.resolveCell(user.organizationId, campaignId, input.level, input.cellAId),
       this.resolveCell(user.organizationId, campaignId, input.level, input.cellBId),
     ]);
+
+    // No duplicate active test on the same (unordered) pair.
+    const dup = await this.prisma.abTest.findFirst({
+      where: {
+        organizationId: user.organizationId,
+        campaignId,
+        status: { in: ["DRAFT", "PENDING_APPROVAL", "RUNNING"] },
+        OR: [
+          { cellAId: a.id, cellBId: b.id },
+          { cellAId: b.id, cellBId: a.id },
+        ],
+      },
+    });
+    if (dup) throw AppException.conflict("כבר קיים מבחן פעיל על אותו זוג וריאציות", "DUPLICATE_TEST");
 
     const test = await this.prisma.abTest.create({
       data: {
@@ -89,10 +111,15 @@ export class AbTestsService {
   }
 
   async list(user: AuthContext, campaignId?: string) {
+    const scopeFilter =
+      user.role === "CLIENT_VIEWER" && user.clientScope.length > 0
+        ? { clientId: { in: user.clientScope } }
+        : {};
     return this.prisma.abTest.findMany({
       where: {
         organizationId: user.organizationId,
         ...(campaignId ? { campaignId } : {}),
+        ...scopeFilter,
       },
       orderBy: { createdAt: "desc" },
       take: 100,
@@ -104,6 +131,7 @@ export class AbTestsService {
       where: { id, organizationId: user.organizationId },
     });
     if (!test) throw AppException.notFound("המבחן לא נמצא");
+    this.assertScope(user, test.clientId);
     return test;
   }
 
@@ -127,6 +155,23 @@ export class AbTestsService {
       this.resolveCell(user.organizationId, test.campaignId, level, test.cellBId),
     ]);
 
+    // A split test runs on LIVE Meta entities — both cells must be published.
+    if (!a.metaId || !b.metaId) {
+      throw AppException.badRequest(
+        "יש לפרסם את הקמפיין/המודעות ל-Meta לפני הרצת מבחן A/B (שתי הווריאציות חייבות להיות חיות).",
+        "AD_NOT_PUBLISHED",
+      );
+    }
+    // A conversions test is meaningless without a pixel/conversion source.
+    if (test.metric === "CVR") {
+      const pixelCount = await this.prisma.metaPixel.count({
+        where: { organizationId: user.organizationId, connectionId: account.connectionId },
+      });
+      if (pixelCount === 0) {
+        throw AppException.badRequest("מבחן המרות (CVR) דורש פיקסל מחובר. חבר פיקסל או בחר מדד CTR.", "NO_PIXEL");
+      }
+    }
+
     const spec = {
       abTestId: test.id,
       adAccountId: account.accountId,
@@ -134,8 +179,8 @@ export class AbTestsService {
       name: test.name,
       metric: test.metric === "CTR" ? "LINK_CLICKS" : "CONVERSIONS",
       cells: [
-        { name: a.label, metaEntityId: a.metaId ?? a.id },
-        { name: b.label, metaEntityId: b.metaId ?? b.id },
+        { name: a.label, metaEntityId: a.metaId },
+        { name: b.label, metaEntityId: b.metaId },
       ],
     };
     const payloadHash = this.crypto.hashJson(spec);
@@ -175,8 +220,31 @@ export class AbTestsService {
 
   async cancel(user: AuthContext, id: string) {
     const test = await this.get(user, id);
+    if (test.status === "CANCELLED" || test.status === "CONCLUDED") {
+      throw AppException.conflict("המבחן כבר הסתיים ולא ניתן לביטול", "AB_TEST_TERMINAL");
+    }
+
+    // A RUNNING test is live on Meta and spending — stop it there before we mark it
+    // cancelled locally, or budget would keep burning behind a "cancelled" label.
+    if (test.status === "RUNNING" && test.metaTestId) {
+      const account = await this.prisma.metaAdAccount.findFirst({
+        where: { organizationId: user.organizationId, clientId: test.clientId, isSelected: true },
+      });
+      if (!account) throw AppException.badRequest("לא נבחר חשבון מודעות", "NO_AD_ACCOUNT");
+      const ctx = await this.meta.context(user.organizationId, account.connectionId);
+      await this.callLogger.wrap(
+        {
+          organizationId: user.organizationId,
+          connectionId: account.connectionId,
+          operation: "stopSplitTest",
+          isWrite: true,
+        },
+        () => this.meta.connector().stopSplitTest(ctx, account.accountId, test.metaTestId!),
+      );
+    }
+
     await this.prisma.$transaction([
-      this.prisma.abTest.update({ where: { id: test.id }, data: { status: "CANCELLED" } }),
+      this.prisma.abTest.update({ where: { id: test.id }, data: { status: "CANCELLED", endAt: new Date() } }),
       this.prisma.approval.updateMany({
         where: { organizationId: user.organizationId, entityType: "AB_TEST", entityId: test.id, status: "PENDING" },
         data: { status: "EXPIRED" },
@@ -188,6 +256,7 @@ export class AbTestsService {
       action: "abtest.cancel",
       entityType: "ab_test",
       entityId: test.id,
+      metadata: { stoppedOnMeta: test.status === "RUNNING" },
     });
     return { ok: true };
   }
@@ -222,9 +291,25 @@ export class AbTestsService {
       trials: useCvr ? cell.clicks : cell.impressions,
       successes: useCvr ? cell.conversions : cell.clicks,
     });
+
+    // Attribute live cells to OUR cells by the entity id we launched — never by
+    // array position (Meta returns cells in arbitrary order; positional matching
+    // would glue the wrong ad's metrics to a variant and mis-declare the winner).
+    const findByEntity = (metaId: string | null) =>
+      metaId ? info.cells.find((c) => c.metaEntityId && c.metaEntityId === metaId) : undefined;
+    let aCell = findByEntity(test.cellAMetaId);
+    let bCell = findByEntity(test.cellBMetaId);
+    if (!aCell || !bCell || aCell === bCell) {
+      this.logger.warn(
+        `AB test ${test.id}: could not attribute cells by entity id (cells lack matching metaEntityId); falling back to positional order`,
+      );
+      aCell = info.cells[0];
+      bCell = info.cells[1];
+    }
+
     const result = evaluateAbTest(
-      toVariant(info.cells[0], test.cellAId, test.cellALabel),
-      toVariant(info.cells[1], test.cellBId, test.cellBLabel),
+      toVariant(aCell, test.cellAId, test.cellALabel),
+      toVariant(bCell, test.cellBId, test.cellBLabel),
       useCvr ? "יחס המרה (לידים/קליקים)" : "CTR (קליקים/חשיפות)",
     );
 

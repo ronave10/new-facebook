@@ -24,9 +24,13 @@ import type {
   MetaPixelInfo,
   InterestSearchQuery,
   SplitTestSpec,
+  SplitTestCellSpec,
   SplitTestInfo,
   SplitTestStatus,
 } from "../types";
+
+/** In-memory split-test store (module scope → survives connector re-instantiation). */
+const MOCK_SPLIT_TESTS = new Map<string, { name: string; cells: SplitTestCellSpec[]; stopped: boolean }>();
 
 interface MockEntity {
   id: string;
@@ -396,24 +400,48 @@ export class MockMetaConnector implements MetaConnector {
     spec: SplitTestSpec,
   ): Promise<{ id: string; status: SplitTestStatus }> {
     const id = `mock_study_${Math.round(seed01(spec.name + spec.cells.map((c) => c.metaEntityId).join()) * 1e9)}`;
+    // Persist so getSplitTest can faithfully echo the cells' entity ids (the real
+    // API ties each cell to the ad entity it tests). Module-scoped to survive
+    // across connector instances within the process.
+    MOCK_SPLIT_TESTS.set(id, { name: spec.name, cells: spec.cells, stopped: false });
     return { id, status: "RUNNING" };
   }
 
   async getSplitTest(_ctx: MetaConnectorContext, testId: string): Promise<SplitTestInfo> {
-    // Deterministic two-cell result: cell A meaningfully beats cell B.
-    const base = seed01(testId);
-    const impA = 8000 + Math.round(base * 4000);
-    const impB = 8000 + Math.round(seed01(testId + "b") * 4000);
+    const stored = MOCK_SPLIT_TESTS.get(testId);
+    // Faithful path: cells reflect the entities that were launched, each with its
+    // own deterministic (entity-seeded) metrics — so results attribute correctly.
+    const specCells = stored?.cells ?? [
+      { name: "וריאציה A", metaEntityId: `${testId}_A` },
+      { name: "וריאציה B", metaEntityId: `${testId}_B` },
+    ];
+    const cells = specCells.map((c, i) => {
+      const r = seed01(c.metaEntityId + testId);
+      const impressions = 8000 + Math.round(r * 4000);
+      const ctr = 0.026 + r * 0.01;
+      const clicks = Math.round(impressions * ctr);
+      const cvr = 0.04 + seed01(c.metaEntityId + "cvr") * 0.06;
+      return {
+        id: `${testId}_cell_${i}`,
+        name: c.name,
+        metaEntityId: c.metaEntityId,
+        impressions,
+        clicks,
+        conversions: Math.round(clicks * cvr),
+      };
+    });
     return {
       id: testId,
-      name: "מבחן פיצול",
-      status: "RUNNING",
-      cells: [
-        { id: `${testId}_A`, name: "וריאציה A", impressions: impA, clicks: Math.round(impA * 0.03), conversions: Math.round(impA * 0.03 * 0.09) },
-        { id: `${testId}_B`, name: "וריאציה B", impressions: impB, clicks: Math.round(impB * 0.028), conversions: Math.round(impB * 0.028 * 0.05) },
-      ],
+      name: stored?.name ?? "מבחן פיצול",
+      status: stored?.stopped ? "CANCELLED" : "RUNNING",
+      cells,
       startTime: isoDaysAgo(7),
     };
+  }
+
+  async stopSplitTest(_ctx: MetaConnectorContext, _adAccountId: string, testId: string): Promise<void> {
+    const stored = MOCK_SPLIT_TESTS.get(testId);
+    if (stored) stored.stopped = true;
   }
 
   async getLead(_ctx: MetaConnectorContext, leadId: string): Promise<MetaLeadInfo> {

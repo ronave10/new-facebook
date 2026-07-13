@@ -298,7 +298,15 @@ export class ApprovalsService {
       }),
       this.prisma.abTest.update({
         where: { id: test.id },
-        data: { status: "RUNNING", metaTestId: created.id, startAt: new Date(), launchedById: user.userId },
+        data: {
+          status: "RUNNING",
+          metaTestId: created.id,
+          startAt: new Date(),
+          launchedById: user.userId,
+          // Snapshot the launched entity ids so results attribute to the right cell.
+          cellAMetaId: spec.cells[0]?.metaEntityId ?? null,
+          cellBMetaId: spec.cells[1]?.metaEntityId ?? null,
+        },
       }),
     ]);
     await this.audit.log({

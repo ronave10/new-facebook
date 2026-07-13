@@ -466,11 +466,14 @@ export class MarketingApiConnector implements MetaConnector {
 
   async getSplitTest(ctx: MetaConnectorContext, testId: string): Promise<SplitTestInfo> {
     const data = await this.get<any>(ctx, `/${testId}`, {
-      fields: "id,name,cooldown_start_time,end_time,start_time,cells{id,name,control_percentage}",
+      fields:
+        "id,name,end_time,start_time,cells{id,name,treatment_percentage,adentities_to_include,impressions,clicks,conversions}",
     });
     const cells = (data.cells?.data ?? []).map((c: any) => ({
       id: String(c.id),
       name: c.name ?? "",
+      // Tie the cell back to the ad entity it tests, for correct attribution.
+      metaEntityId: Array.isArray(c.adentities_to_include) ? String(c.adentities_to_include[0] ?? "") : undefined,
       impressions: Number(c.impressions ?? 0),
       clicks: Number(c.clicks ?? 0),
       conversions: Number(c.conversions ?? 0),
@@ -483,6 +486,11 @@ export class MarketingApiConnector implements MetaConnector {
       startTime: data.start_time,
       endTime: data.end_time,
     };
+  }
+
+  async stopSplitTest(ctx: MetaConnectorContext, _adAccountId: string, testId: string): Promise<void> {
+    // End the experiment now so it stops delivering/spending.
+    await this.post<{ success: boolean }>(ctx, `/${testId}`, { end_time: new Date().toISOString() });
   }
 
   async getLead(ctx: MetaConnectorContext, leadId: string): Promise<MetaLeadInfo> {

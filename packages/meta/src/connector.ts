@@ -119,6 +119,8 @@ export interface MetaConnector {
   ): Promise<{ id: string; status: SplitTestStatus }>;
   /** Read a split test's status and per-cell metrics. */
   getSplitTest(ctx: MetaConnectorContext, testId: string): Promise<SplitTestInfo>;
+  /** Stop a running split test (ends the experiment so it stops spending). */
+  stopSplitTest(ctx: MetaConnectorContext, adAccountId: string, testId: string): Promise<void>;
 
   // ── Custom audiences (remarketing / lookalikes) ──
   listCustomAudiences(ctx: MetaConnectorContext, adAccountId: string): Promise<MetaCustomAudienceInfo[]>;

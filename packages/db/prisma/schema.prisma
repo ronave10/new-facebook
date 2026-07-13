@@ -485,6 +485,10 @@ model AbTest {
   cellALabel     String
   cellBId        String
   cellBLabel     String
+  // Meta entity ids actually launched (snapshot at approval), so live cell metrics
+  // can be attributed back to the correct cell instead of by array position.
+  cellAMetaId    String?
+  cellBMetaId    String?
   metaTestId     String?
   startAt        DateTime?
   endAt          DateTime?

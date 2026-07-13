@@ -364,6 +364,10 @@ export class McpMetaConnector implements MetaConnector {
     };
   }
 
+  async stopSplitTest(_ctx: MetaConnectorContext, _adAccountId: string, testId: string): Promise<void> {
+    await this.transport.callTool("ads_experiment_abtest_update_test", { test_id: testId, action: "STOP" });
+  }
+
   async getLead(_ctx: MetaConnectorContext, leadId: string): Promise<MetaLeadInfo> {
     const res = (await this.transport.callTool("ads_get_lead", { lead_id: leadId })) as any;
     return {
