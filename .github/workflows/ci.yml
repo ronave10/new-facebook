@@ -58,5 +58,11 @@ jobs:
       - name: Unit tests
         run: pnpm test
 
+      - name: E2E safety tests (tenant isolation / approval gate / RBAC)
+        run: pnpm --filter @campaignos/api test:e2e
+        env:
+          RUN_E2E: "1"
+          META_APP_SECRET: ci-e2e-app-secret
+
       - name: Build web
         run: pnpm --filter @campaignos/web build
