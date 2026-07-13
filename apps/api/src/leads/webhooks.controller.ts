@@ -75,24 +75,14 @@ export class WebhooksController {
     const raw = body?.signed_request;
     if (typeof raw !== "string" || !raw) return null;
     const cfg = loadConfig();
-    if (cfg.META_APP_SECRET) return parseSignedRequest(raw, cfg.META_APP_SECRET);
-
-    // No app secret → we cannot verify the signature. These are PUBLIC endpoints
-    // that DELETE data, so we must FAIL CLOSED in any real deployment: only allow
-    // an unverified decode in local mock/dev, never in production or a live Meta mode.
-    const devUnverifiedOk = cfg.META_MODE === "mock" && process.env.NODE_ENV !== "production";
-    if (!devUnverifiedOk) {
-      this.logger.error("Rejected signed_request: META_APP_SECRET is not configured (cannot verify a data-deletion request)");
+    // These are PUBLIC endpoints that DELETE data. We ALWAYS require a verified
+    // signature — there is no unverified path in any environment. Without an app
+    // secret we cannot verify, so we fail closed (set META_APP_SECRET, even in dev).
+    if (!cfg.META_APP_SECRET) {
+      this.logger.error("Rejected signed_request: META_APP_SECRET is not configured — cannot verify a data-deletion request");
       return null;
     }
-    this.logger.warn("Decoding signed_request WITHOUT verification (mock/dev only — set META_APP_SECRET in production)");
-    try {
-      const enc = raw.split(".", 2)[1];
-      if (!enc) return null;
-      return JSON.parse(Buffer.from(enc.replace(/-/g, "+").replace(/_/g, "/"), "base64").toString("utf8"));
-    } catch {
-      return null;
-    }
+    return parseSignedRequest(raw, cfg.META_APP_SECRET);
   }
 
   /**
