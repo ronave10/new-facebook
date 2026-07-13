@@ -335,16 +335,59 @@ export class ApprovalsService {
       this.logger.error(
         `AB launch ${test.id}: Meta study ${created.id} created but DB commit failed — compensating with stopSplitTest`,
       );
-      await this.meta
-        .connector()
-        .stopSplitTest(ctx, spec.adAccountId, created.id)
-        .catch((stopErr) =>
-          this.logger.error(
-            `AB launch ${test.id}: COMPENSATION FAILED — orphaned live study ${created.id} may still be spending: ${(stopErr as Error).message}`,
-          ),
+      // Compensating stop is itself a spend-affecting Meta write → audit it.
+      let stopped = false;
+      try {
+        await this.callLogger.wrap(
+          {
+            organizationId: user.organizationId,
+            connectionId: spec.connectionId,
+            operation: "stopSplitTest",
+            isWrite: true,
+            approvalId: approval.id,
+          },
+          () => this.meta.connector().stopSplitTest(ctx, spec.adAccountId, created.id),
         );
+        stopped = true;
+      } catch (stopErr) {
+        this.logger.error(
+          `AB launch ${test.id}: COMPENSATION FAILED — orphaned live study ${created.id} may still be spending: ${(stopErr as Error).message}`,
+        );
+      }
+      // Prevent a re-approvable double-launch: expire the approval and take the test
+      // out of the launchable state. If the stop failed, keep the study tracked
+      // (RUNNING + metaTestId) so it can still be cancelled; if it stopped, reset to
+      // DRAFT for a clean, deliberate re-launch. Best-effort — the original DB error
+      // may recur, in which case we've at least logged loudly.
+      try {
+        await this.prisma.$transaction([
+          this.prisma.approval.update({
+            where: { id: approval.id },
+            data: { status: "EXPIRED", decidedById: user.userId, decidedAt: new Date(), reason: "launch persistence failed" },
+          }),
+          this.prisma.abTest.update({
+            where: { id: test.id },
+            data: stopped
+              ? { status: "DRAFT" }
+              : {
+                  status: "RUNNING",
+                  metaTestId: created.id,
+                  startAt: new Date(),
+                  launchedById: user.userId,
+                  cellAMetaId: spec.cells[0]?.metaEntityId ?? null,
+                  cellBMetaId: spec.cells[1]?.metaEntityId ?? null,
+                },
+          }),
+        ]);
+      } catch (cleanupErr) {
+        this.logger.error(
+          `AB launch ${test.id}: post-failure cleanup also failed — approval ${approval.id} may remain PENDING: ${(cleanupErr as Error).message}`,
+        );
+      }
       throw AppException.badRequest(
-        "השקת המבחן נכשלה בשמירה ובוטלה ב-Meta. נסה שוב.",
+        stopped
+          ? "השקת המבחן נכשלה בשמירה ובוטלה ב-Meta. ניתן לנסות שוב."
+          : "השקת המבחן נכשלה בשמירה וייתכן שהניסוי עדיין פעיל ב-Meta. בטל אותו מהמסך או פנה לתמיכה.",
         "AB_LAUNCH_ROLLED_BACK",
       );
     }

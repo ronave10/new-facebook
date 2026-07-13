@@ -46,8 +46,14 @@ function deps(txImpl: any) {
     stopSplitTest: vi.fn().mockResolvedValue(undefined),
   };
   const meta: any = { context: vi.fn().mockResolvedValue({}), connector: () => connector };
-  const callLogger: any = { wrap: (_m: unknown, fn: () => unknown) => fn() };
-  return { prisma, crypto, audit, campaigns, meta, callLogger, connector };
+  const wrapCalls: any[] = [];
+  const callLogger: any = {
+    wrap: (m: any, fn: () => unknown) => {
+      wrapCalls.push(m);
+      return fn();
+    },
+  };
+  return { prisma, crypto, audit, campaigns, meta, callLogger, connector, wrapCalls };
 }
 
 async function makeService(d: ReturnType<typeof deps>) {
@@ -69,14 +75,24 @@ describe("ApprovalsService.decideAbTestLaunch", () => {
     expect(abData.cellBMetaId).toBe("m_B");
   });
 
-  it("compensates by stopping the Meta study if the DB commit fails (#2)", async () => {
-    const d = deps(async () => {
-      throw new Error("deadlock");
-    });
+  it("compensates (audited) and blocks re-launch if the DB commit fails (#2 + review follow-ups)", async () => {
+    // main launch tx throws; the best-effort cleanup tx then succeeds
+    const tx = vi
+      .fn()
+      .mockImplementationOnce(() => {
+        throw new Error("deadlock");
+      })
+      .mockImplementation(async (arr: any) => Promise.all(arr));
+    const d = deps(tx);
     const svc = await makeService(d);
     await expect(svc.decide(checker as any, "apr1", true)).rejects.toThrow(/AB_LAUNCH_ROLLED_BACK|בוטלה/);
-    // the just-created live study must be stopped so it doesn't spend orphaned
+    // the just-created live study must be stopped so it doesn't spend orphaned...
     expect(d.connector.createSplitTest).toHaveBeenCalledOnce();
     expect(d.connector.stopSplitTest).toHaveBeenCalledWith(expect.anything(), "act1", "study1");
+    // ...and the compensating stop is AUDITED as a write (not a silent bypass)
+    expect(d.wrapCalls.some((c) => c.operation === "stopSplitTest" && c.isWrite)).toBe(true);
+    // ...and the approval is EXPIRED so a checker can't re-approve → double-launch
+    const apprUpdates = d.prisma.approval.update.mock.calls.map((c: any) => c[0].data.status);
+    expect(apprUpdates).toContain("EXPIRED");
   });
 });
