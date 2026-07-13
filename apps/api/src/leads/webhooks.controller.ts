@@ -4,6 +4,7 @@ import { Public } from "../core/auth-context";
 import { loadConfig } from "../core/config";
 import { LeadsService } from "./leads.service";
 import { verifyMetaSignature } from "./webhook-signature.util";
+import { parseSignedRequest, type SignedRequestPayload } from "./signed-request.util";
 
 /**
  * Meta Webhooks receiver for leadgen events.
@@ -66,5 +67,62 @@ export class WebhooksController {
     } catch (err) {
       this.logger.error(`Leadgen processing failed: ${(err as Error).message}`);
     }
+  }
+
+  /** Reads and verifies the `signed_request` field. In dev (no app secret) the
+   * payload is decoded without HMAC so the flow is testable offline. */
+  private readSignedRequest(body: any): SignedRequestPayload | null {
+    const raw = body?.signed_request;
+    if (typeof raw !== "string" || !raw) return null;
+    const cfg = loadConfig();
+    if (cfg.META_APP_SECRET) return parseSignedRequest(raw, cfg.META_APP_SECRET);
+    // Dev fallback: decode the payload half without verification.
+    try {
+      const enc = raw.split(".", 2)[1];
+      if (!enc) return null;
+      return JSON.parse(Buffer.from(enc.replace(/-/g, "+").replace(/_/g, "/"), "base64").toString("utf8"));
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Meta Data Deletion Request Callback (required for apps handling user data).
+   * Verifies the signed_request, erases the user's leads, and returns the
+   * { url, confirmation_code } Meta expects.
+   */
+  @Public()
+  @Post("data-deletion")
+  async dataDeletion(@Body() body: any, @Res() res: Response) {
+    const payload = this.readSignedRequest(body);
+    if (!payload) return res.status(400).json({ error: "invalid signed_request" });
+    const { code } = await this.leads.handleDataDeletion(payload.user_id ? String(payload.user_id) : undefined);
+    return res.status(200).json({
+      url: `${loadConfig().API_URL}/api/v1/webhooks/meta/data-deletion/status?code=${code}`,
+      confirmation_code: code,
+    });
+  }
+
+  /** Status endpoint Meta (or the user) can poll to confirm the deletion. */
+  @Public()
+  @Get("data-deletion/status")
+  async dataDeletionStatus(@Query("code") code: string, @Res() res: Response) {
+    if (!code) return res.status(400).json({ error: "missing code" });
+    try {
+      return res.status(200).json(await this.leads.getDeletionStatus(code));
+    } catch {
+      return res.status(404).json({ error: "not found" });
+    }
+  }
+
+  /** Meta Deauthorize Callback (fired when a user removes the app). We record it
+   * as a deletion-class event and erase that user's leads. */
+  @Public()
+  @Post("deauthorize")
+  async deauthorize(@Body() body: any, @Res() res: Response) {
+    const payload = this.readSignedRequest(body);
+    if (!payload) return res.status(400).json({ error: "invalid signed_request" });
+    await this.leads.handleDataDeletion(payload.user_id ? String(payload.user_id) : undefined, "deauthorize");
+    return res.status(200).json({ ok: true });
   }
 }

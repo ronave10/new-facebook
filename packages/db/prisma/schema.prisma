@@ -717,11 +717,16 @@ model Lead {
   adId           String?
   formId         String?
   metaLeadId     String     @unique
-  fullName       String?
-  email          String?
-  phone          String?
-  // full field_data payload from Meta (arbitrary form fields)
-  fieldData      Json       @default("{}")
+  // End-user PII (name/email/phone + full field_data) is NEVER stored in plaintext.
+  // It is AES-256-GCM encrypted at rest (like Meta tokens) and decrypted only for
+  // authorized reads. See LeadsService.
+  piiCiphertext  String?
+  piiIv          String?
+  piiAuthTag     String?
+  piiKeyVersion  Int?
+  // App-scoped Facebook user id, when present — lets the Data Deletion Callback
+  // match and erase this person's leads. Not itself PII contact data.
+  fbUserId       String?
   status         LeadStatus @default(NEW)
   notes          String?
   metaCreatedAt  DateTime?
@@ -731,7 +736,30 @@ model Lead {
   client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
 
   @@index([organizationId, clientId, status])
+  @@index([fbUserId])
   @@map("leads")
+}
+
+enum DataDeletionStatus {
+  RECEIVED
+  COMPLETED
+}
+
+// Meta Data Deletion Request Callback records (GDPR / Platform Terms). A verified
+// signed_request creates one; the confirmationCode is returned to Meta and is
+// checkable at the status URL.
+model DataDeletionRequest {
+  id               String             @id @default(cuid())
+  confirmationCode String             @unique
+  metaUserId       String?
+  source           String             @default("data_deletion") // or "deauthorize"
+  status           DataDeletionStatus @default(RECEIVED)
+  leadsDeleted     Int                @default(0)
+  createdAt        DateTime           @default(now())
+  completedAt      DateTime?
+
+  @@index([metaUserId])
+  @@map("data_deletion_requests")
 }
 
 // ─────────────────────────────── Approvals & Safety ───────────────────────────────

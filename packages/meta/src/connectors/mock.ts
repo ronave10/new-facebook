@@ -457,6 +457,8 @@ export class MockMetaConnector implements MetaConnector {
         { name: "full_name", values: [`${first} ישראלי`] },
         { name: "email", values: [`${first.toLowerCase()}${Math.floor(r * 1000)}@example.co.il`] },
         { name: "phone_number", values: [`05${Math.floor(r * 90000000 + 10000000)}`] },
+        // App-scoped FB user id — lets the Data Deletion Callback match this lead.
+        { name: "fb_user_id", values: [`fbuser_${Math.floor(r * 1e9)}`] },
       ],
     };
   }
