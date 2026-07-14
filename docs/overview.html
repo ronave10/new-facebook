@@ -1,0 +1,350 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CampaignOS AI — סקירת מערכת</title>
+</head>
+<body>
+<style>
+  :root {
+    --bg: #eceff2;
+    --surface: #ffffff;
+    --raise: #f6f8f9;
+    --ink: #101720;
+    --muted: #55616f;
+    --faint: #7c8794;
+    --line: #dbe1e7;
+    --accent: #0c7d84;
+    --accent-2: #095c62;
+    --ok: #1f8a5b;
+    --warn: #a9701a;
+    --crit: #bf4038;
+    --glow: rgba(12,125,132,.14);
+    --grid: rgba(16,23,32,.045);
+    --shadow: 0 1px 2px rgba(16,23,32,.04), 0 8px 30px rgba(16,23,32,.06);
+    --font-sans: system-ui, -apple-system, "Segoe UI", "Noto Sans Hebrew", "Arial Hebrew", Arial, sans-serif;
+    --font-mono: "SF Mono", "JetBrains Mono", "IBM Plex Mono", ui-monospace, Menlo, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0b0f15; --surface: #131a23; --raise: #19212c; --ink: #e9eef4;
+      --muted: #8b98a8; --faint: #6a7787; --line: #232d3a;
+      --accent: #37bcc5; --accent-2: #2a959c;
+      --ok: #3fca88; --warn: #e0a640; --crit: #e26b63;
+      --glow: rgba(55,188,197,.16); --grid: rgba(233,238,244,.04);
+      --shadow: 0 1px 2px rgba(0,0,0,.3), 0 10px 34px rgba(0,0,0,.34);
+    }
+  }
+  :root[data-theme="light"] {
+    --bg: #eceff2; --surface: #ffffff; --raise: #f6f8f9; --ink: #101720;
+    --muted: #55616f; --faint: #7c8794; --line: #dbe1e7;
+    --accent: #0c7d84; --accent-2: #095c62; --ok: #1f8a5b; --warn: #a9701a; --crit: #bf4038;
+    --glow: rgba(12,125,132,.14); --grid: rgba(16,23,32,.045);
+    --shadow: 0 1px 2px rgba(16,23,32,.04), 0 8px 30px rgba(16,23,32,.06);
+  }
+  :root[data-theme="dark"] {
+    --bg: #0b0f15; --surface: #131a23; --raise: #19212c; --ink: #e9eef4;
+    --muted: #8b98a8; --faint: #6a7787; --line: #232d3a;
+    --accent: #37bcc5; --accent-2: #2a959c; --ok: #3fca88; --warn: #e0a640; --crit: #e26b63;
+    --glow: rgba(55,188,197,.16); --grid: rgba(233,238,244,.04);
+    --shadow: 0 1px 2px rgba(0,0,0,.3), 0 10px 34px rgba(0,0,0,.34);
+  }
+
+  * { box-sizing: border-box; }
+  body { margin: 0; }
+  .page {
+    font-family: var(--font-sans);
+    background: var(--bg);
+    color: var(--ink);
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+    min-height: 100vh;
+    position: relative;
+    overflow-x: hidden;
+  }
+  .bg {
+    position: fixed; inset: 0; z-index: 0; pointer-events: none;
+    background-image:
+      radial-gradient(1100px 520px at 88% -8%, var(--glow), transparent 60%),
+      linear-gradient(var(--grid) 1px, transparent 1px),
+      linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+    background-size: 100% 100%, 46px 46px, 46px 46px;
+  }
+  .wrap { position: relative; z-index: 1; max-width: 1060px; margin: 0 auto; padding: 0 22px; }
+
+  /* ---- hero ---- */
+  .hero { padding: 74px 0 34px; }
+  .eyebrow {
+    font-family: var(--font-mono); font-size: 12px; letter-spacing: .16em;
+    text-transform: uppercase; color: var(--accent); font-weight: 600;
+    display: inline-flex; align-items: center; gap: 10px;
+  }
+  .eyebrow::before { content: ""; width: 26px; height: 1px; background: var(--accent); opacity: .6; }
+  h1 {
+    font-size: clamp(2.6rem, 7vw, 4.4rem); line-height: 1.02; letter-spacing: -.02em;
+    font-weight: 800; margin: 18px 0 0; text-wrap: balance;
+  }
+  h1 .tld { color: var(--accent); }
+  .thesis {
+    font-size: clamp(1.06rem, 2.3vw, 1.32rem); color: var(--muted);
+    max-width: 60ch; margin: 20px 0 0; text-wrap: pretty;
+  }
+  .thesis b { color: var(--ink); font-weight: 650; }
+  .chips { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 26px; align-items: center; }
+  .live {
+    display: inline-flex; align-items: center; gap: 8px; font-family: var(--font-mono);
+    font-size: 12.5px; color: var(--ink); background: var(--surface);
+    border: 1px solid var(--line); border-radius: 999px; padding: 6px 13px; box-shadow: var(--shadow);
+  }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ok); box-shadow: 0 0 0 0 var(--ok); }
+  @media (prefers-reduced-motion: no-preference) { .dot { animation: pulse 2.4s ease-out infinite; } }
+  @keyframes pulse { 0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--ok) 55%, transparent); } 70%,100% { box-shadow: 0 0 0 7px transparent; } }
+  .branch { font-family: var(--font-mono); font-size: 12.5px; color: var(--muted); }
+  .branch b { color: var(--accent-2); font-weight: 600; }
+
+  /* ---- stats ---- */
+  .stats {
+    display: grid; grid-template-columns: repeat(5, 1fr); gap: 1px;
+    background: var(--line); border: 1px solid var(--line); border-radius: 16px;
+    overflow: hidden; margin-top: 40px; box-shadow: var(--shadow);
+  }
+  .stat { background: var(--surface); padding: 20px 18px; }
+  .stat .num {
+    font-family: var(--font-mono); font-size: clamp(1.5rem, 3.6vw, 2.15rem); font-weight: 700;
+    letter-spacing: -.01em; font-variant-numeric: tabular-nums; color: var(--ink); line-height: 1;
+  }
+  .stat .lbl { font-size: 12.5px; color: var(--muted); margin-top: 8px; }
+  @media (max-width: 720px) { .stats { grid-template-columns: repeat(2, 1fr); } }
+
+  /* ---- section frame ---- */
+  section.block { padding: 52px 0 0; }
+  .kicker {
+    font-family: var(--font-mono); font-size: 11.5px; letter-spacing: .18em; text-transform: uppercase;
+    color: var(--faint); font-weight: 600; margin: 0 0 4px;
+  }
+  h2 { font-size: clamp(1.5rem, 3.4vw, 2rem); letter-spacing: -.015em; font-weight: 750; margin: 0; text-wrap: balance; }
+  .lede { color: var(--muted); margin: 10px 0 0; max-width: 62ch; }
+
+  /* ---- capabilities ---- */
+  .grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; margin-top: 26px; }
+  @media (max-width: 720px) { .grid { grid-template-columns: 1fr; } }
+  .card {
+    background: var(--surface); border: 1px solid var(--line); border-radius: 16px;
+    padding: 22px 22px 20px; box-shadow: var(--shadow); position: relative;
+  }
+  .card h3 { margin: 0; font-size: 1.12rem; font-weight: 700; letter-spacing: -.01em; display: flex; align-items: baseline; gap: 10px; }
+  .card h3 .idx { font-family: var(--font-mono); font-size: 12px; color: var(--accent); font-weight: 600; }
+  .card ul { list-style: none; margin: 14px 0 0; padding: 0; display: flex; flex-direction: column; gap: 9px; }
+  .card li { display: flex; gap: 10px; font-size: 14.5px; color: var(--muted); }
+  .card li::before { content: ""; flex: none; width: 6px; height: 6px; margin-top: 8px; border-radius: 50%; background: var(--accent); opacity: .75; }
+  .card li b { color: var(--ink); font-weight: 620; }
+
+  /* ---- safety panel ---- */
+  .panel {
+    margin-top: 26px; background: var(--surface); border: 1px solid var(--line);
+    border-radius: 16px; box-shadow: var(--shadow); overflow: hidden;
+  }
+  .row { display: flex; align-items: center; gap: 14px; padding: 15px 20px; border-top: 1px solid var(--line); }
+  .row:first-child { border-top: none; }
+  .row .name { flex: 1; font-size: 14.5px; }
+  .row .name b { font-weight: 640; }
+  .row .name span { color: var(--muted); }
+  .tag {
+    font-family: var(--font-mono); font-size: 11.5px; font-weight: 600; letter-spacing: .03em;
+    padding: 4px 10px; border-radius: 999px; white-space: nowrap;
+    display: inline-flex; align-items: center; gap: 6px;
+  }
+  .tag::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+  .tag.ok { color: var(--ok); background: color-mix(in srgb, var(--ok) 13%, transparent); }
+  .tag.warn { color: var(--warn); background: color-mix(in srgb, var(--warn) 15%, transparent); }
+
+  /* ---- timeline ---- */
+  .timeline { margin-top: 26px; display: flex; flex-direction: column; gap: 0; }
+  .step { display: grid; grid-template-columns: auto 1fr; gap: 18px; }
+  .rail { display: flex; flex-direction: column; align-items: center; }
+  .rail .node {
+    width: 30px; height: 30px; flex: none; border-radius: 9px; background: var(--surface);
+    border: 1px solid var(--line); box-shadow: var(--shadow); display: grid; place-items: center;
+    font-family: var(--font-mono); font-size: 12.5px; font-weight: 700; color: var(--accent);
+  }
+  .rail .line { width: 1px; flex: 1; background: var(--line); margin: 4px 0; }
+  .step:last-child .rail .line { display: none; }
+  .step .body { padding-bottom: 24px; }
+  .step .body h4 { margin: 3px 0 0; font-size: 1.02rem; font-weight: 700; letter-spacing: -.01em; }
+  .step .body p { margin: 6px 0 0; color: var(--muted); font-size: 14.5px; max-width: 64ch; }
+  .commit { font-family: var(--font-mono); font-size: 12px; color: var(--accent-2); font-weight: 600; }
+
+  /* ---- stack strip ---- */
+  .stack { margin-top: 26px; display: flex; flex-wrap: wrap; gap: 8px; }
+  .pill {
+    font-family: var(--font-mono); font-size: 12.5px; color: var(--muted);
+    background: var(--raise); border: 1px solid var(--line); border-radius: 8px; padding: 7px 12px;
+  }
+  .pill b { color: var(--ink); font-weight: 600; }
+
+  footer {
+    margin-top: 60px; padding: 26px 0 56px; border-top: 1px solid var(--line);
+    display: flex; flex-wrap: wrap; gap: 12px 24px; align-items: center; justify-content: space-between;
+    color: var(--faint); font-size: 12.5px;
+  }
+  footer .mono { font-family: var(--font-mono); }
+  footer .mono b { color: var(--accent-2); }
+  a.foot { color: var(--muted); text-decoration: none; border-bottom: 1px solid var(--line); }
+  a.foot:hover, a.foot:focus-visible { color: var(--accent); }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 6px; }
+</style>
+
+<div class="page" dir="rtl" lang="he">
+  <div class="bg" aria-hidden="true"></div>
+  <div class="wrap">
+
+    <header class="hero">
+      <span class="eyebrow">SaaS לניהול קמפיינים · META&nbsp;ADS</span>
+      <h1>Campaign<span class="tld">OS</span> AI</h1>
+      <p class="thesis">
+        פלטפורמה רב-דיירית (multi-tenant) לסוכנויות שיווק — מנהלת קמפיינים ב-Meta מקצה לקצה,
+        בעברית מלאה. <b>שום דבר לא עולה לאוויר בלי אישור אנושי מפורש</b> — כל כתיבה עוברת מסך
+        Review&nbsp;&amp;&nbsp;Approve שמציג את ה-payload המדויק שיישלח.
+      </p>
+      <div class="chips">
+        <span class="live"><span class="dot" aria-hidden="true"></span> בענן · נבדק חי מקצה-לקצה</span>
+        <span class="branch">branch <b dir="ltr">claude/campaignos-ai-saas</b> · HEAD <b dir="ltr">f183651</b></span>
+      </div>
+    </header>
+
+    <section class="stats" aria-label="מדדי המערכת">
+      <div class="stat"><div class="num" data-to="30" data-suffix="+">30+</div><div class="lbl">טבלאות במסד הנתונים</div></div>
+      <div class="stat"><div class="num" data-to="10">10</div><div class="lbl">סוכני AI פנימיים</div></div>
+      <div class="stat"><div class="num" data-to="3">3</div><div class="lbl">מימושי Meta connector</div></div>
+      <div class="stat"><div class="num" data-to="123">123</div><div class="lbl">בדיקות · 114 unit + 9 e2e</div></div>
+      <div class="stat"><div class="num" data-to="0">0</div><div class="lbl">אובדן מידע ברוטציית מפתחות</div></div>
+    </section>
+
+    <section class="block">
+      <p class="kicker">היכולות</p>
+      <h2>ארבעה עמודי-תווך, מזרימת עבודה אחת</h2>
+      <p class="lede">מלקוח חדש ועד סקייל — כל שלב נתמך בסוכני AI, במנוע שיווק דטרמיניסטי בדוק, ובשער בטיחות אחיד.</p>
+      <div class="grid">
+        <article class="card">
+          <h3><span class="idx" dir="ltr">01</span> לקוח ותוכן AI</h3>
+          <ul>
+            <li><b>אשף לקוח חדש</b> + מילוי מותג אוטומטי (Magic Fill) מתוך אתר — שאיבה מוגנת-SSRF ומילוי ב-AI.</li>
+            <li><b>בניית פרסונות</b> (3–5 אווטארים) ומנוע מודעות: 10 זוויות, hooks, טקסטים ווריאציות לכל פרסונה.</li>
+            <li><b>אסטרטגיה</b> — TOF/MOF/BOF, חלוקת תקציב, KPIs וחוקי Kill/Scale/Refresh.</li>
+          </ul>
+        </article>
+        <article class="card">
+          <h3><span class="idx" dir="ltr">02</span> חיבור ונתוני Meta</h3>
+          <ul>
+            <li><b>חיבור</b> OAuth / MCP / Mock — טוקנים מוצפנים, בחירת חשבון מודעות.</li>
+            <li><b>משיכת נתונים</b> מלאה: spend, CTR, CPC, CPM, leads, CPA/CPL, ROAS + סדרות זמן.</li>
+            <li>דאשבורד ביצועים עם "מה לעשות עכשיו" ו-10 סוכני AI.</li>
+          </ul>
+        </article>
+        <article class="card">
+          <h3><span class="idx" dir="ltr">03</span> אופטימיזציה ולידים</h3>
+          <ul>
+            <li><b>לולאת אופטימיזציה</b>: המלצה → אישור תקציב → ביצוע ב-Meta, תחת שער הבטיחות.</li>
+            <li><b>קליטת לידים</b> (Lead Ads) עם webhook מאומת-HMAC לתיבת לידים.</li>
+            <li>קהלים מותאמים ו-Lookalikes, חיפוש תחומי עניין לטירגוט.</li>
+          </ul>
+        </article>
+        <article class="card">
+          <h3><span class="idx" dir="ltr">04</span> אנליטיקה מתקדמת</h3>
+          <ul>
+            <li><b>ציון בריאות חשבון</b> (0–100) ב-6 קטגוריות + דוח PDF מוכן-ללקוח.</li>
+            <li><b>מנוע A/B</b>: מבחן z, רווחי סמך Wilson, ותחזית "כמה ימים עד הכרעה".</li>
+            <li><b>הרצת A/B חיה</b> דרך Meta Experiments — מאחורי שער האישור, ומחקר מתחרים מ-Ad&nbsp;Library.</li>
+          </ul>
+        </article>
+      </div>
+    </section>
+
+    <section class="block">
+      <p class="kicker">בטיחות ופרטיות</p>
+      <h2>נכשל-סגור, כברירת מחדל</h2>
+      <p class="lede">כל נתיב שנוגע בכסף או ב-PII נבנה כך שכשל או קונפיגורציה חסרה מובילים לחסימה — לא לחשיפה.</p>
+      <div class="panel">
+        <div class="row"><div class="name"><b>הצפנת AES-256-GCM</b> <span>— טוקני Meta ו-PII של לידים, לעולם לא בטקסט גלוי</span></div><span class="tag ok">פעיל</span></div>
+        <div class="row"><div class="name"><b>Data Deletion + Deauthorize callbacks</b> <span>— מאומתי signed_request (HMAC-SHA256)</span></div><span class="tag ok">פעיל</span></div>
+        <div class="row"><div class="name"><b>רוטציית מפתחות הצפנה</b> <span>— keyring עם גרסאות + עבודת re-encrypt, אפס אובדן</span></div><span class="tag ok">פעיל</span></div>
+        <div class="row"><div class="name"><b>שער אישור (maker-checker)</b> <span>— drift-guard על ה-payload, יצירה ב-Meta תמיד PAUSED</span></div><span class="tag ok">פעיל</span></div>
+        <div class="row"><div class="name"><b>בידוד דיירים + RBAC</b> <span>— נבדק ב-e2e: 404 חוצה-ארגון, 403 הרשאות</span></div><span class="tag ok">פעיל</span></div>
+        <div class="row"><div class="name"><b>מסלול Meta אמיתי (Graph)</b> <span>— מסומן בקוד כלא-מאומת; השירות נכשל-סגור כדי לא להחליט על סמך תשובה שגויה</span></div><span class="tag warn">ממתין ל-App Review</span></div>
+      </div>
+    </section>
+
+    <section class="block">
+      <p class="kicker">הקשחה — מחזור grill → תיקון → אימות</p>
+      <h2>איך הקוד נבדק על עצמו</h2>
+      <p class="lede">הרצת ביקורת אדוורסרית על הקוד שנכתב; כל ליקוי שנמצא תוקן ואומת חי — לא רק ב-unit ירוק.</p>
+      <div class="timeline">
+        <div class="step"><div class="rail"><div class="node" dir="ltr">1</div><div class="line"></div></div>
+          <div class="body"><h4>grill חשף 4 ליקויים</h4><p>ביקורת עצמית על קוד ה-A/B — כולל באג ממשי אחד ("mock ≠ פרודקשן").</p></div></div>
+        <div class="step"><div class="rail"><div class="node" dir="ltr">2</div><div class="line"></div></div>
+          <div class="body"><h4>תיקון A/B + 3 סבבי ביקורת אדוורסרית</h4><p>ייחוס-לפי-entity-id שנכשל-סגור, פיצוי בהשקה, cancel שעוצר ומשהה מודעות. הביקורת מצאה 13 ליקויים נוספים → תיקון → 2 → 0. <span class="commit" dir="ltr">16287ac · 03303fc · e695f5c</span></p></div></div>
+        <div class="step"><div class="rail"><div class="node" dir="ltr">3</div><div class="line"></div></div>
+          <div class="body"><h4>הצפנת PII + מחיקת מידע</h4><p>PII של לידים עבר להצפנה at-rest; נוספו Data Deletion / Deauthorize callbacks עם אימות fail-closed. <span class="commit" dir="ltr">8ebb32f · 24c78a6</span></p></div></div>
+        <div class="step"><div class="rail"><div class="node" dir="ltr">4</div><div class="line"></div></div>
+          <div class="body"><h4>רוטציית מפתחות הצפנה</h4><p>keyring עם גרסאות + עבודת re-encrypt. אומת חי: v1→v2 על 6 טוקנים + ליד, אפס אובדן. <span class="commit" dir="ltr">6cde1a2</span></p></div></div>
+        <div class="step"><div class="rail"><div class="node" dir="ltr">5</div><div class="line"></div></div>
+          <div class="body"><h4>בדיקות HTTP e2e ב-CI</h4><p>בידוד דיירים (404), שער אישור (409) ו-RBAC (403) מול אפליקציה חיה + Postgres. <span class="commit" dir="ltr">f183651</span></p></div></div>
+      </div>
+    </section>
+
+    <section class="block">
+      <p class="kicker">ארכיטקטורה</p>
+      <h2>מונו-רפו, גבולות נקיים</h2>
+      <div class="stack">
+        <span class="pill"><b>apps/api</b> · NestJS 11</span>
+        <span class="pill"><b>apps/web</b> · Next.js 15 · RTL</span>
+        <span class="pill"><b>db</b> · Prisma + PostgreSQL</span>
+        <span class="pill"><b>shared</b> · zod + RBAC</span>
+        <span class="pill"><b>meta</b> · 3 connectors</span>
+        <span class="pill"><b>marketing-core</b> · מנוע דטרמיניסטי</span>
+        <span class="pill">BullMQ · Redis</span>
+        <span class="pill">S3 / MinIO</span>
+        <span class="pill">Anthropic Claude</span>
+      </div>
+    </section>
+
+    <footer>
+      <span>CampaignOS AI — מסמך סיכום מערכת · לשיתוף פנימי</span>
+      <span class="mono">tests <b>123 ✓</b> · typecheck <b>clean</b> · web <b>builds</b></span>
+    </footer>
+
+  </div>
+</div>
+
+<script>
+  (function () {
+    var reduce = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    var nums = Array.prototype.slice.call(document.querySelectorAll(".num[data-to]"));
+    function run(el) {
+      var to = parseInt(el.getAttribute("data-to"), 10) || 0;
+      var suffix = el.getAttribute("data-suffix") || "";
+      if (reduce || to === 0) { el.textContent = to + suffix; return; }
+      var start = null, dur = 900;
+      function tick(t) {
+        if (start === null) start = t;
+        var p = Math.min((t - start) / dur, 1);
+        var eased = 1 - Math.pow(1 - p, 3);
+        el.textContent = Math.round(eased * to) + suffix;
+        if (p < 1) requestAnimationFrame(tick);
+      }
+      requestAnimationFrame(tick);
+    }
+    if ("IntersectionObserver" in window) {
+      var io = new IntersectionObserver(function (entries) {
+        entries.forEach(function (e) { if (e.isIntersecting) { run(e.target); io.unobserve(e.target); } });
+      }, { threshold: 0.4 });
+      nums.forEach(function (n) { io.observe(n); });
+    } else {
+      nums.forEach(run);
+    }
+  })();
+</script>
+
+</body>
+</html>
