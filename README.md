@@ -66,9 +66,10 @@ packages/
 # 1. התקנה
 pnpm install
 
-# 2. משתני סביבה
-cp .env.example .env
-# צרו מפתחות: openssl rand -hex 32  →  JWT_ACCESS_SECRET / JWT_REFRESH_SECRET / CREDENTIALS_ENCRYPTION_KEY
+# 2. משתני סביבה (ה-API טוען apps/api/.env)
+cp apps/api/.env.example apps/api/.env
+# מצב mock עובד מיד. לפרודקשן צרו מפתחות: openssl rand -hex 32
+#   → JWT_ACCESS_SECRET / JWT_REFRESH_SECRET / CREDENTIALS_ENCRYPTION_KEY
 
 # 3. מסד נתונים (דורש Postgres רץ)
 pnpm db:up            # אופציונלי: מריץ postgres+redis+minio בדוקר
