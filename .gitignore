@@ -33,3 +33,4 @@ coverage/
 
 # local storage (minio/uploads)
 .storage/
+.pgdata/
